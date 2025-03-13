@@ -20,6 +20,9 @@ interface DendronNode {
 
 // Dendron Tree View class
 class DendronTreeView extends ItemView {
+	private lastBuiltTree: DendronNode | null = null;
+	private container: HTMLElement | null = null;
+
 	constructor(leaf: WorkspaceLeaf) {
 		super(leaf);
 	}
@@ -39,12 +42,35 @@ class DendronTreeView extends ItemView {
 	async onOpen() {
 		const container = this.containerEl.children[1];
 		container.empty();
+		container.createEl('h4', { text: 'Dendron Tree' });
 		
 		// Create a container for the dendron tree
 		const treeContainer = container.createEl('div', { cls: 'dendron-tree-container' });
+		this.container = treeContainer;
 		
 		// Build the dendron tree
 		await this.buildDendronTree(treeContainer);
+
+		// Register event handlers for file changes
+		this.registerEvent(
+			this.app.vault.on('create', () => this.refresh())
+		);
+		this.registerEvent(
+			this.app.vault.on('modify', () => this.refresh())
+		);
+		this.registerEvent(
+			this.app.vault.on('delete', () => this.refresh())
+		);
+		this.registerEvent(
+			this.app.vault.on('rename', () => this.refresh())
+		);
+	}
+
+	async refresh() {
+		if (this.container) {
+			this.container.empty();
+			await this.buildDendronTree(this.container);
+		}
 	}
 
 	createDendronNode(): DendronNode {
@@ -130,8 +156,6 @@ class DendronTreeView extends ItemView {
 		// If no files found in the tree, return empty string (vault root)
 		return "";
 	}
-
-	private lastBuiltTree: DendronNode | null = null;
 
 	async buildDendronTree(container: HTMLElement) {
 		// Get all markdown files
