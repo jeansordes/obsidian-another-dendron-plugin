@@ -1,7 +1,7 @@
 import { App, Editor, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Setting, TFolder, TFile, ItemView, WorkspaceLeaf, ViewState } from 'obsidian';
 
 // Define the view type for our file tree view
-const FILE_TREE_VIEW_TYPE = 'file-tree-view';
+const FILE_TREE_VIEW_TYPE = 'dendron-tree-view';
 
 interface MyPluginSettings {
 	mySetting: string;
@@ -11,8 +11,15 @@ const DEFAULT_SETTINGS: MyPluginSettings = {
 	mySetting: 'default'
 }
 
-// File Tree View class
-class FileTreeView extends ItemView {
+interface DendronNode {
+	name: string;
+	children: Map<string, DendronNode>;
+	file?: TFile;
+	isFile: boolean;
+}
+
+// Dendron Tree View class
+class DendronTreeView extends ItemView {
 	constructor(leaf: WorkspaceLeaf) {
 		super(leaf);
 	}
@@ -22,7 +29,7 @@ class FileTreeView extends ItemView {
 	}
 
 	getDisplayText(): string {
-		return 'File Tree';
+		return 'Dendron Tree';
 	}
 
 	getIcon(): string {
@@ -32,96 +39,235 @@ class FileTreeView extends ItemView {
 	async onOpen() {
 		const container = this.containerEl.children[1];
 		container.empty();
-		container.createEl('h4', { text: 'Vault File Tree' });
 		
-		// Create a container for the file tree
-		const fileTreeContainer = container.createEl('div', { cls: 'file-tree-container' });
+		// Create a container for the dendron tree
+		const treeContainer = container.createEl('div', { cls: 'dendron-tree-container' });
 		
-		// Build the file tree
-		await this.buildFileTree(fileTreeContainer);
+		// Build the dendron tree
+		await this.buildDendronTree(treeContainer);
 	}
 
-	async buildFileTree(container: HTMLElement) {
-		// Get the root folder of the vault
-		const rootFolder = this.app.vault.getRoot();
-		
-		// Create a list for the file tree
-		const rootList = container.createEl('ul', { cls: 'file-tree-list' });
-		
-		// Recursively build the tree
-		await this.addFolderToTree(rootFolder, rootList);
+	createDendronNode(): DendronNode {
+		return {
+			name: '',
+			children: new Map<string, DendronNode>(),
+			isFile: false
+		};
 	}
 
-	async addFolderToTree(folder: TFolder, parentEl: HTMLElement) {
-		// Sort children: folders first, then files, both alphabetically
-		const children = folder.children.sort((a, b) => {
-			// Folders come before files
-			const aIsFolder = a instanceof TFolder;
-			const bIsFolder = b instanceof TFolder;
-			
-			if (aIsFolder && !bIsFolder) return -1;
-			if (!aIsFolder && bIsFolder) return 1;
-			
-			// Alphabetical sort
-			return a.name.localeCompare(b.name);
-		});
+	buildDendronStructure(files: TFile[]): DendronNode {
+		const root = this.createDendronNode();
+		const processedPaths = new Set<string>();
 		
-		// Add each child to the tree
-		for (const child of children) {
-			const item = parentEl.createEl('li');
+		for (const file of files) {
+			const parts = file.basename.split('.');
+			let current = root;
+			let currentPath = '';
 			
-			if (child instanceof TFolder) {
-				// Create a folder item with a toggle
-				const folderDiv = item.createEl('div', { cls: 'file-tree-folder' });
+			// Process all possible parent paths first
+			for (let i = 0; i < parts.length - 1; i++) {
+				const part = parts[i];
+				currentPath = currentPath ? currentPath + '.' + part : part;
 				
-				// Add a toggle button
-				const toggleButton = folderDiv.createEl('span', { 
-					cls: 'file-tree-folder-toggle',
-					text: '▶' 
+				if (!current.children.has(currentPath)) {
+					current.children.set(currentPath, {
+						name: currentPath,
+						children: new Map<string, DendronNode>(),
+						isFile: false
+					});
+				}
+				current = current.children.get(currentPath)!;
+				processedPaths.add(currentPath);
+			}
+
+			// Process the leaf (file) node
+			const leafName = parts[parts.length - 1];
+			currentPath = currentPath ? currentPath + '.' + leafName : leafName;
+			
+			if (!processedPaths.has(currentPath)) {
+				current.children.set(currentPath, {
+					name: currentPath,
+					children: new Map<string, DendronNode>(),
+					isFile: true,
+					file: file
 				});
-				
-				// Add folder name
-				folderDiv.createEl('span', { 
-					cls: 'file-tree-folder-name',
-					text: child.name 
-				});
-				
-				// Create a nested list for the folder's children
-				const nestedList = item.createEl('ul', { 
-					cls: 'file-tree-nested-list file-tree-collapsed' 
-				});
-				
-				// Add click handler for the toggle
-				toggleButton.addEventListener('click', () => {
-					toggleButton.textContent = toggleButton.textContent === '▶' ? '▼' : '▶';
-					if (nestedList.hasClass('file-tree-collapsed')) {
-						nestedList.removeClass('file-tree-collapsed');
-					} else {
-						nestedList.addClass('file-tree-collapsed');
-					}
-				});
-				
-				// Recursively add the folder's children
-				await this.addFolderToTree(child, nestedList);
-			} else if (child instanceof TFile) {
-				// Create a file item
-				const fileDiv = item.createEl('div', { cls: 'file-tree-file' });
-				
-				// Add file name
-				fileDiv.createEl('span', { 
-					cls: 'file-tree-file-name',
-					text: child.name 
-				});
-				
-				// Add click handler to open the file
-				fileDiv.addEventListener('click', async () => {
-					const leaf = this.app.workspace.getLeaf('tab');
-					if (leaf) {
-						await leaf.openFile(child);
-					}
-				});
+				processedPaths.add(currentPath);
 			}
 		}
+		
+		return root;
+	}
+
+	// Add these helper methods before renderDendronNode
+	private findParentFolder(node: DendronNode): string {
+		// First try to find a file in the current node's children
+		for (const [_, childNode] of node.children) {
+			if (childNode.file?.parent?.path) {
+				return childNode.file.parent.path;
+			}
+		}
+
+		// If no file found in children, look for files in parent nodes
+		let current = node;
+		while (current) {
+			for (const [_, siblingNode] of current.children) {
+				if (siblingNode.file?.parent?.path) {
+					return siblingNode.file.parent.path;
+				}
+			}
+			// Move up the tree by finding the parent node
+			let found = false;
+			for (const [_, potentialParent] of this.lastBuiltTree?.children || new Map()) {
+				if (potentialParent.children.has(current.name)) {
+					current = potentialParent;
+					found = true;
+					break;
+				}
+			}
+			if (!found) break;
+		}
+
+		// If no files found in the tree, return empty string (vault root)
+		return "";
+	}
+
+	private lastBuiltTree: DendronNode | null = null;
+
+	async buildDendronTree(container: HTMLElement) {
+		// Get all markdown files
+		const files = this.app.vault.getMarkdownFiles();
+		
+		// Build the dendron structure
+		const root = this.buildDendronStructure(files);
+		this.lastBuiltTree = root;
+		
+		// Create the tree view
+		const rootList = container.createEl('ul', { cls: 'dendron-tree-list' });
+		this.renderDendronNode(root, rootList, '');
+	}
+
+	renderDendronNode(node: DendronNode, parentEl: HTMLElement, prefix: string) {
+		// Sort children by name
+		const sortedChildren = Array.from(node.children.entries())
+			.sort(([aKey], [bKey]) => aKey.localeCompare(bKey));
+
+		sortedChildren.forEach(([name, childNode], index) => {
+			const item = parentEl.createEl('div', { cls: 'tree-item is-clickable' });
+			
+			const itemSelf = item.createEl('div', { 
+				cls: 'tree-item-self is-clickable' + (childNode.children.size > 0 ? ' mod-collapsible' : '')
+			});
+
+			if (childNode.children.size > 0) {
+				const iconDiv = itemSelf.createEl('div', { cls: 'tree-item-icon collapse-icon' });
+				iconDiv.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="svg-icon right-triangle"><path d="M3 8L12 17L21 8"></path></svg>`;
+			}
+
+			// Display name without the path
+			const displayName = name.split('.').pop() || name;
+			const innerDiv = itemSelf.createEl('div', { 
+				cls: 'tree-item-inner' + (!childNode.file && childNode.isFile ? ' mod-create-new' : ''),
+				text: displayName
+			});
+
+			if (!childNode.isFile && childNode.children.size === 0) {
+				itemSelf.createEl('div', { cls: 'structured-tree-not-found' });
+			}
+
+			// Track clicks for double-click detection
+			let clickTimeout: NodeJS.Timeout | null = null;
+			let preventSingleClick = false;
+
+			// Handle click events
+			itemSelf.addEventListener('click', async (event) => {
+				if (preventSingleClick) {
+					preventSingleClick = false;
+					return;
+				}
+
+				// Handle single click
+				if (childNode.children.size > 0) {
+					item.toggleClass('is-collapsed', !item.hasClass('is-collapsed'));
+					const triangle = itemSelf.querySelector('.right-triangle');
+					if (triangle) {
+						triangle.classList.toggle('is-collapsed');
+					}
+				}
+
+				if (childNode.isFile && childNode.file) {
+					const leaf = this.app.workspace.getLeaf('tab');
+					if (leaf) {
+						await leaf.openFile(childNode.file);
+					}
+				}
+			});
+
+			// Handle double-click events
+			itemSelf.addEventListener('dblclick', async (event) => {
+				preventSingleClick = true;
+				
+				if (clickTimeout) {
+					clearTimeout(clickTimeout);
+					clickTimeout = null;
+				}
+
+				// Handle folder note creation/opening
+				if (childNode.children.size > 0) {
+					const parentFolder = this.findParentFolder(childNode);
+					const folderNotePath = parentFolder 
+						? `${parentFolder}/${name}.md`
+						: `${name}.md`;
+
+					let folderNote = this.app.vault.getAbstractFileByPath(folderNotePath);
+					
+					if (!folderNote) {
+						try {
+							folderNote = await this.app.vault.create(folderNotePath, '');
+							new Notice('Created folder note: ' + folderNotePath);
+						} catch (error) {
+							console.error('Failed to create folder note:', error);
+							new Notice('Failed to create folder note: ' + folderNotePath);
+						}
+					}
+
+					if (folderNote instanceof TFile) {
+						const leaf = this.app.workspace.getLeaf('tab');
+						if (leaf) {
+							await leaf.openFile(folderNote);
+						}
+					}
+				}
+
+				// Handle file creation for non-existent files
+				if (childNode.isFile && !childNode.file) {
+					try {
+						const parentFolder = this.findParentFolder(childNode);
+						const fullPath = parentFolder 
+							? `${parentFolder}/${name}.md`
+							: `${name}.md`;
+
+						const file = await this.app.vault.create(fullPath, '');
+						new Notice('Created file: ' + fullPath);
+						const leaf = this.app.workspace.getLeaf('tab');
+						if (leaf) {
+							await leaf.openFile(file);
+						}
+					} catch (error) {
+						console.error('Failed to create file:', error);
+						new Notice('Failed to create file: ' + name + '.md');
+					}
+				}
+			});
+
+			if (childNode.children.size > 0) {
+				const childrenDiv = item.createEl('div', { 
+					cls: 'tree-item-children',
+					attr: { style: '' }
+				});
+
+				this.renderDendronNode(childNode, childrenDiv, '');
+			}
+		});
 	}
 }
 
@@ -134,7 +280,7 @@ export default class MyPlugin extends Plugin {
 		// Register the file tree view
 		this.registerView(
 			FILE_TREE_VIEW_TYPE,
-			(leaf) => new FileTreeView(leaf)
+			(leaf) => new DendronTreeView(leaf)
 		);
 
 		// Add a ribbon icon to open the file tree view
