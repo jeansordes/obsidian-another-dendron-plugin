@@ -1,6 +1,4 @@
-/* Dendron Tree View Styles */
 .dendron-tree-container {
-    padding: 8px 4px;
     user-select: none;
 }
 
@@ -8,11 +6,6 @@
     list-style: none;
     padding: 0;
     margin: 0;
-    padding-left: 4px;
-}
-
-.tree-item {
-    padding-left: 4px;
 }
 
 .tree-item-self {
@@ -23,6 +16,7 @@
     color: var(--nav-item-color);
     white-space: nowrap;
     justify-content: space-between;
+    line-height: 1.5rem;
 }
 
 .tree-item-content {
@@ -56,34 +50,47 @@
     border-radius: 3px;
 }
 
-/* Only apply hover effect to clickable items */
 .tree-item-inner.is-clickable:hover {
     background-color: var(--nav-item-background-hover);
     color: var(--nav-item-color-hover);
     cursor: pointer;
 }
 
-/* Style for non-existent files */
 .tree-item-inner.mod-create-new {
     opacity: 0.7;
     font-style: italic;
     cursor: default;
 }
 
-/* Style for folders without folder notes */
 .tree-item-self.mod-collapsible .tree-item-inner:not(.is-clickable):not(.mod-create-new) {
     cursor: default;
+}
+
+.tree-item-folder-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    margin-left: 4px;
+    color: var(--nav-item-color);
+}
+
+.tree-item-folder-icon svg {
+    width: 16px;
+    height: 16px;
+    color: var(--nav-folder-color);
 }
 
 .tree-item-children {
     padding-left: 4px;
 }
 
-.tree-item.is-collapsed > .tree-item-children {
+.tree-item.is-collapsed>.tree-item-children {
     display: none;
 }
 
-.tree-item.is-collapsed > .tree-item-self .right-triangle {
+.tree-item.is-collapsed>.tree-item-self .right-triangle {
     transform: rotate(-90deg);
 }
 
@@ -92,8 +99,6 @@
 }
 
 .collapse-icon svg {
-    width: 14px;
-    height: 14px;
     color: var(--nav-collapse-icon-color);
 }
 
@@ -101,7 +106,6 @@
     color: var(--nav-item-color-hover);
 }
 
-/* Additional utility classes */
 .is-clickable {
     cursor: pointer;
 }
@@ -114,7 +118,6 @@
     opacity: 0.5;
 }
 
-/* Create button styles */
 .tree-item-create-button {
     display: flex;
     align-items: center;
@@ -133,7 +136,5 @@
 }
 
 .tree-item-create-button svg {
-    width: 14px;
-    height: 14px;
     color: var(--nav-item-color);
 }

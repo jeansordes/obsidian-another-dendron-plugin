@@ -1,4 +1,4 @@
-import { TFile } from 'obsidian';
+import { TFile, TFolder } from 'obsidian';
 import { DendronNode } from '../models/types';
 
 /**
@@ -8,7 +8,8 @@ export function createDendronNode(): DendronNode {
     return {
         name: '',
         children: new Map<string, DendronNode>(),
-        isFile: false,
+        isRealFile: false,
+        isRealFolder: false,
         folderPath: ''
     };
 }
@@ -16,13 +17,22 @@ export function createDendronNode(): DendronNode {
 /**
  * Builds a Dendron structure from a list of files
  */
-export function buildDendronStructure(files: TFile[]): DendronNode {
+export function buildDendronStructure(folders: TFolder[], files: TFile[]): DendronNode {
     const root = createDendronNode();
     const processedPaths = new Set<string>();
-    
+
+    // create a set of all folder paths
+    const folderPaths = new Set<string>();
+    for (const folder of folders) {
+        // transform file path to dendron path
+        folderPaths.add(folder.path.replace(/\//g, '.'));
+    }
+
     // First pass: create the structure and store file references
     for (const file of files) {
-        const parts = file.basename.split('.');
+        // transform file path to dendron path
+        const dendronFilePath = file.path.replace(/\//g, '.').replace(/\.md$/, '');
+        const parts = dendronFilePath.split('.');
         let current = root;
         let currentPath = '';
         
@@ -35,7 +45,8 @@ export function buildDendronStructure(files: TFile[]): DendronNode {
                 current.children.set(currentPath, {
                     name: currentPath,
                     children: new Map<string, DendronNode>(),
-                    isFile: false,
+                    isRealFile: false,
+                    isRealFolder: folderPaths.has(currentPath),
                     folderPath: file.parent ? file.parent.path : ''
                 });
             }
@@ -51,7 +62,8 @@ export function buildDendronStructure(files: TFile[]): DendronNode {
             current.children.set(currentPath, {
                 name: currentPath,
                 children: new Map<string, DendronNode>(),
-                isFile: true,
+                isRealFile: true,
+                isRealFolder: folderPaths.has(currentPath),
                 file: file,
                 folderPath: file.parent ? file.parent.path : ''
             });

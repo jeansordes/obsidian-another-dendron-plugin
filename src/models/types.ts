@@ -17,6 +17,7 @@ export interface DendronNode {
     name: string;
     children: Map<string, DendronNode>;
     file?: TFile;
-    isFile: boolean;
+    isRealFile: boolean;
+    isRealFolder: boolean;
     folderPath: string;
-} 
+}

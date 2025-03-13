@@ -15,7 +15,7 @@ export default class MyPlugin extends Plugin {
 		);
 
 		// Add a ribbon icon to open the file tree view
-		this.addRibbonIcon('folder', 'Open File Tree', (evt: MouseEvent) => {
+		this.addRibbonIcon('structured-activity-bar', 'Open Dendron Tree', (evt: MouseEvent) => {
 			this.activateView();
 		});
 
@@ -182,19 +182,3 @@ export default class MyPlugin extends Plugin {
 		});
 	}
 }
-
-class SampleModal extends Modal {
-	constructor(app: App) {
-		super(app);
-	}
-
-	onOpen() {
-		const {contentEl} = this;
-		contentEl.setText('Woah!');
-	}
-
-	onClose() {
-		const {contentEl} = this;
-		contentEl.empty();
-	}
-} 

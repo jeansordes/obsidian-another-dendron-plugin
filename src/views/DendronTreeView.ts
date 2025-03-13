@@ -1,4 +1,4 @@
-import { App, ItemView, Notice, TFile, WorkspaceLeaf } from 'obsidian';
+import { App, ItemView, Notice, TFile, WorkspaceLeaf, setIcon } from 'obsidian';
 import { DendronNode, FILE_TREE_VIEW_TYPE } from '../models/types';
 import { buildDendronStructure } from '../utils/treeUtils';
 import MyPlugin from '../../main';
@@ -21,7 +21,7 @@ export default class DendronTreeView extends ItemView {
     }
 
     getIcon(): string {
-        return 'folder';
+        return 'structured-activity-bar';
     }
 
     // Add serialization methods
@@ -45,7 +45,7 @@ export default class DendronTreeView extends ItemView {
     async onOpen() {
         const container = this.containerEl.children[1];
         container.empty();
-        
+
         // Create a container for the dendron tree
         const treeContainer = container.createEl('div', { cls: 'dendron-tree-container' });
         this.container = treeContainer;
@@ -57,7 +57,7 @@ export default class DendronTreeView extends ItemView {
         this.registerEvent(
             this.app.workspace.on('resize', () => {
                 (this.app.workspace as any).requestSaveLayout();
-                
+
                 // Get the plugin instance
                 const plugin = (this.app as any).plugins.plugins['obsidian-another-dendron-plugin'] as MyPlugin;
                 if (plugin) {
@@ -70,7 +70,7 @@ export default class DendronTreeView extends ItemView {
             this.app.workspace.on('layout-change', () => {
                 // Just save the layout, position tracking is handled in the plugin class
                 (this.app.workspace as any).requestSaveLayout();
-                
+
                 // Get the plugin instance
                 const plugin = (this.app as any).plugins.plugins['obsidian-another-dendron-plugin'] as MyPlugin;
                 if (plugin) {
@@ -78,7 +78,7 @@ export default class DendronTreeView extends ItemView {
                 }
             })
         );
-        
+
         // Additional events that might trigger when view is moved
         this.registerEvent(
             this.app.workspace.on('active-leaf-change', () => {
@@ -89,7 +89,7 @@ export default class DendronTreeView extends ItemView {
                 }
             })
         );
-        
+
         // Build the dendron tree
         await this.buildDendronTree(treeContainer);
 
@@ -116,15 +116,16 @@ export default class DendronTreeView extends ItemView {
     }
 
     async buildDendronTree(container: HTMLElement) {
-        // Get all markdown files
+        // Get all markdown files and folders
+        const folders = this.app.vault.getAllFolders();
         const files = this.app.vault.getMarkdownFiles();
-        
+
         // Build the dendron structure
-        const root = buildDendronStructure(files);
+        const root = buildDendronStructure(folders, files);
         this.lastBuiltTree = root;
-        
+
         // Create the tree view
-        const rootList = container.createEl('ul', { cls: 'dendron-tree-list' });
+        const rootList = container.createEl('div', { cls: 'dendron-tree-list' });
         this.renderDendronNode(root, rootList, '');
     }
 
@@ -135,8 +136,8 @@ export default class DendronTreeView extends ItemView {
 
         sortedChildren.forEach(([name, childNode], index) => {
             const item = parentEl.createEl('div', { cls: 'tree-item' });
-            
-            const itemSelf = item.createEl('div', { 
+
+            const itemSelf = item.createEl('div', {
                 cls: 'tree-item-self' + (childNode.children.size > 0 ? ' mod-collapsible' : '')
             });
 
@@ -146,8 +147,8 @@ export default class DendronTreeView extends ItemView {
             // Add toggle button if has children
             if (childNode.children.size > 0) {
                 const toggleButton = contentWrapper.createEl('div', { cls: 'tree-item-icon collapse-icon is-clickable' });
-                toggleButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="svg-icon right-triangle"><path d="M3 8L12 17L21 8"></path></svg>`;
-                
+                setIcon(toggleButton, 'right-triangle');
+
                 // Handle toggle button click
                 toggleButton.addEventListener('click', (event) => {
                     event.stopPropagation();
@@ -172,74 +173,63 @@ export default class DendronTreeView extends ItemView {
 
             // Display name without the path
             const displayName = name.split('.').pop() || name;
-            const innerDiv = contentWrapper.createEl('div', { 
-                cls: 'tree-item-inner' + (!childNode.file && childNode.isFile ? ' mod-create-new' : 
+            const innerDiv = contentWrapper.createEl('div', {
+                cls: 'tree-item-inner' + (!childNode.file && childNode.isRealFile ? ' mod-create-new' :
                     (childNode.file || folderNoteExists ? ' is-clickable' : '')),
                 text: displayName
             });
 
             // Add a "+" button for non-existent files or folders without folder notes
-            if ((!childNode.file && childNode.isFile) || (childNode.children.size > 0 && !folderNoteExists)) {
-                const createButton = itemSelf.createEl('div', { 
-                    cls: 'tree-item-create-button is-clickable',
-                    attr: { title: childNode.children.size > 0 ? 'Create folder note' : 'Create file' }
-                });
-                createButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="svg-icon"><path d="M12 5v14M5 12h14"></path></svg>`;
-                
-                // Handle create button click
-                createButton.addEventListener('click', async (event) => {
-                    event.stopPropagation();
-                    
-                    // Handle folder note creation
-                    if (childNode.children.size > 0) {
-                        const folderNotePath = `${childNode.folderPath ? childNode.folderPath + '/' : ''}${name}.md`;
-                        let folderNote = this.app.vault.getAbstractFileByPath(folderNotePath);
-                        
-                        if (!folderNote) {
+            if ((!childNode.file && childNode.isRealFile) || (childNode.children.size > 0 && !folderNoteExists)) {
+                if (childNode.isRealFolder) {
+                    const folderIcon = itemSelf.createEl('div', {
+                        cls: 'tree-item-folder-icon',
+                        attr: { title: 'Folder' }
+                    });
+                    setIcon(folderIcon, 'folder');
+                } else if(!childNode.isRealFile) {
+                    const createButton = itemSelf.createEl('div', {
+                        cls: 'tree-item-create-button is-clickable',
+                        attr: { title: 'Create note' }
+                    });
+                    setIcon(createButton, 'plus');
+
+                    // Handle create button click
+                    createButton.addEventListener('click', async (event) => {
+                        event.stopPropagation();
+
+                        const noteName = name.replace(childNode.folderPath + '.', '');
+                        const notePath = childNode.folderPath + '/' + noteName  + '.md';
+                        let note = this.app.vault.getAbstractFileByPath(notePath);
+
+                        if (!note) {
                             try {
-                                folderNote = await this.app.vault.create(folderNotePath, '');
-                                new Notice('Created folder note: ' + folderNotePath);
+                                note = await this.app.vault.create(notePath, '');
+                                new Notice('Created note: ' + notePath);
                             } catch (error) {
-                                console.error('Failed to create folder note:', error);
-                                new Notice('Failed to create folder note: ' + folderNotePath);
+                                console.error('Failed to create note:', error);
+                                new Notice('Failed to create note: ' + notePath);
                             }
                         }
 
-                        if (folderNote instanceof TFile) {
+                        if (note instanceof TFile) {
                             const leaf = this.app.workspace.getLeaf(false);
                             if (leaf) {
-                                await leaf.openFile(folderNote);
+                                await leaf.openFile(note);
                             }
                         }
-                    }
-                    
-                    // Handle file creation for non-existent files
-                    if (childNode.isFile && !childNode.file) {
-                        try {
-                            // Use the stored folder path for file creation
-                            const fullPath = `${childNode.folderPath ? childNode.folderPath + '/' : ''}${name}.md`;
-                            const file = await this.app.vault.create(fullPath, '');
-                            new Notice('Created file: ' + fullPath);
-                            const leaf = this.app.workspace.getLeaf(false);
-                            if (leaf) {
-                                await leaf.openFile(file);
-                            }
-                        } catch (error) {
-                            console.error('Failed to create file:', error);
-                            new Notice('Failed to create file: ' + name + '.md');
-                        }
-                    }
-                });
+                    });
+                }
             }
 
-            if (!childNode.isFile && childNode.children.size === 0) {
+            if (!childNode.isRealFile && childNode.children.size === 0) {
                 itemSelf.createEl('div', { cls: 'structured-tree-not-found' });
             }
 
             // Handle click events on the name only - but only for existing files and folders with folder notes
             if (childNode.file || (childNode.children.size > 0 && folderNoteExists)) {
                 innerDiv.addEventListener('click', async (event) => {
-                    if (childNode.isFile && childNode.file) {
+                    if (childNode.isRealFile && childNode.file) {
                         const leaf = this.app.workspace.getLeaf(false);
                         if (leaf) {
                             await leaf.openFile(childNode.file);
@@ -248,7 +238,7 @@ export default class DendronTreeView extends ItemView {
                         // Try to open folder note if it exists
                         const folderNotePath = `${childNode.folderPath ? childNode.folderPath + '/' : ''}${name}.md`;
                         const folderNote = this.app.vault.getAbstractFileByPath(folderNotePath);
-                        
+
                         if (folderNote instanceof TFile) {
                             const leaf = this.app.workspace.getLeaf(false);
                             if (leaf) {
@@ -260,7 +250,7 @@ export default class DendronTreeView extends ItemView {
             }
 
             if (childNode.children.size > 0) {
-                const childrenDiv = item.createEl('div', { 
+                const childrenDiv = item.createEl('div', {
                     cls: 'tree-item-children',
                     attr: { style: '' }
                 });
@@ -281,8 +271,8 @@ export default class DendronTreeView extends ItemView {
             // Check if any of the mutations involve our view
             const shouldCheck = mutations.some(mutation => {
                 // Check if our view is involved in this mutation
-                return mutation.target.contains(this.containerEl) || 
-                       this.containerEl.contains(mutation.target as Node);
+                return mutation.target.contains(this.containerEl) ||
+                    this.containerEl.contains(mutation.target as Node);
             });
 
             if (shouldCheck) {
@@ -291,8 +281,8 @@ export default class DendronTreeView extends ItemView {
         });
 
         // Start observing the entire app container for changes
-        observer.observe(document.body, { 
-            childList: true, 
+        observer.observe(document.body, {
+            childList: true,
             subtree: true,
             attributes: true,
             attributeFilter: ['class', 'style']
