@@ -6,3 +6,61 @@ available in the app when your plugin is enabled.
 If your plugin does not need CSS, delete this file.
 
 */
+
+/* File Tree View Styles */
+.file-tree-container {
+    margin-top: 10px;
+    overflow: auto;
+    max-height: calc(100vh - 150px);
+}
+
+.file-tree-list,
+.file-tree-nested-list {
+    list-style: none;
+    padding-left: 0;
+    margin: 0;
+}
+
+.file-tree-nested-list {
+    padding-left: 20px;
+}
+
+.file-tree-collapsed {
+    display: none;
+}
+
+.file-tree-folder,
+.file-tree-file {
+    padding: 4px 0;
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    border-radius: 4px;
+}
+
+.file-tree-folder:hover,
+.file-tree-file:hover {
+    background-color: var(--background-secondary);
+}
+
+.file-tree-folder-toggle {
+    display: inline-block;
+    width: 16px;
+    text-align: center;
+    margin-right: 4px;
+    cursor: pointer;
+    user-select: none;
+}
+
+.file-tree-folder-name,
+.file-tree-file-name {
+    margin-left: 4px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Existing styles */
+.my-plugin-ribbon-class {
+    color: var(--text-accent);
+}
