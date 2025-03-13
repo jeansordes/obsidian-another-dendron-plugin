@@ -5,10 +5,12 @@ const FILE_TREE_VIEW_TYPE = 'dendron-tree-view';
 
 interface MyPluginSettings {
 	mySetting: string;
+	position: string;
 }
 
 const DEFAULT_SETTINGS: MyPluginSettings = {
-	mySetting: 'default'
+	mySetting: 'default',
+	position: 'left'
 }
 
 interface DendronNode {
@@ -16,6 +18,7 @@ interface DendronNode {
 	children: Map<string, DendronNode>;
 	file?: TFile;
 	isFile: boolean;
+	folderPath: string;
 }
 
 // Dendron Tree View class
@@ -39,14 +42,71 @@ class DendronTreeView extends ItemView {
 		return 'folder';
 	}
 
+	// Add serialization methods
+	async setState(state: any, result: any) {
+		if (state.dimensions?.width) {
+			(this.leaf as any).dimension = state.dimensions;
+		}
+		if (state.position) {
+			(this.leaf as any).position = state.position;
+		}
+		await super.setState(state, result);
+	}
+
+	getState(): any {
+		const state = super.getState();
+		state.dimensions = (this.leaf as any).dimension;
+		state.position = (this.leaf as any).position;
+		return state;
+	}
+
 	async onOpen() {
 		const container = this.containerEl.children[1];
 		container.empty();
-		container.createEl('h4', { text: 'Dendron Tree' });
 		
 		// Create a container for the dendron tree
 		const treeContainer = container.createEl('div', { cls: 'dendron-tree-container' });
 		this.container = treeContainer;
+
+		// Set up a MutationObserver to detect when the view is moved
+		this.setupMutationObserver();
+
+		// Save state when the leaf is resized or moved
+		this.registerEvent(
+			this.app.workspace.on('resize', () => {
+				(this.app.workspace as any).requestSaveLayout();
+				
+				// Get the plugin instance
+				const plugin = (this.app as any).plugins.plugins['obsidian-another-dendron-plugin'] as MyPlugin;
+				if (plugin) {
+					setTimeout(() => plugin.detectAndSavePosition(), 100);
+				}
+			})
+		);
+
+		this.registerEvent(
+			this.app.workspace.on('layout-change', () => {
+				// Just save the layout, position tracking is handled in the plugin class
+				(this.app.workspace as any).requestSaveLayout();
+				
+				// Get the plugin instance
+				const plugin = (this.app as any).plugins.plugins['obsidian-another-dendron-plugin'] as MyPlugin;
+				if (plugin) {
+					setTimeout(() => plugin.detectAndSavePosition(), 100);
+				}
+			})
+		);
+		
+		// Additional events that might trigger when view is moved
+		this.registerEvent(
+			this.app.workspace.on('active-leaf-change', () => {
+				// Get the plugin instance
+				const plugin = (this.app as any).plugins.plugins['obsidian-another-dendron-plugin'] as MyPlugin;
+				if (plugin) {
+					setTimeout(() => plugin.detectAndSavePosition(), 100);
+				}
+			})
+		);
 		
 		// Build the dendron tree
 		await this.buildDendronTree(treeContainer);
@@ -77,7 +137,8 @@ class DendronTreeView extends ItemView {
 		return {
 			name: '',
 			children: new Map<string, DendronNode>(),
-			isFile: false
+			isFile: false,
+			folderPath: ''
 		};
 	}
 
@@ -85,6 +146,7 @@ class DendronTreeView extends ItemView {
 		const root = this.createDendronNode();
 		const processedPaths = new Set<string>();
 		
+		// First pass: create the structure and store file references
 		for (const file of files) {
 			const parts = file.basename.split('.');
 			let current = root;
@@ -99,7 +161,8 @@ class DendronTreeView extends ItemView {
 					current.children.set(currentPath, {
 						name: currentPath,
 						children: new Map<string, DendronNode>(),
-						isFile: false
+						isFile: false,
+						folderPath: file.parent ? file.parent.path : ''
 					});
 				}
 				current = current.children.get(currentPath)!;
@@ -115,46 +178,48 @@ class DendronTreeView extends ItemView {
 					name: currentPath,
 					children: new Map<string, DendronNode>(),
 					isFile: true,
-					file: file
+					file: file,
+					folderPath: file.parent ? file.parent.path : ''
 				});
 				processedPaths.add(currentPath);
 			}
 		}
 		
+		// Second pass: propagate folder paths to nodes that might not have files
+		this.propagateFolderPaths(root);
+		
 		return root;
 	}
-
-	// Add these helper methods before renderDendronNode
-	private findParentFolder(node: DendronNode): string {
-		// First try to find a file in the current node's children
+	
+	// Helper method to propagate folder paths from children to parents
+	private propagateFolderPaths(node: DendronNode) {
+		// If this node already has a folder path, no need to propagate
+		if (node.folderPath) {
+			// Recursively process children
+			for (const [_, childNode] of node.children) {
+				this.propagateFolderPaths(childNode);
+			}
+			return;
+		}
+		
+		// Try to get folder path from children
 		for (const [_, childNode] of node.children) {
-			if (childNode.file?.parent?.path) {
-				return childNode.file.parent.path;
+			if (childNode.folderPath) {
+				node.folderPath = childNode.folderPath;
+				break;
 			}
 		}
-
-		// If no file found in children, look for files in parent nodes
-		let current = node;
-		while (current) {
-			for (const [_, siblingNode] of current.children) {
-				if (siblingNode.file?.parent?.path) {
-					return siblingNode.file.parent.path;
-				}
-			}
-			// Move up the tree by finding the parent node
-			let found = false;
-			for (const [_, potentialParent] of this.lastBuiltTree?.children || new Map()) {
-				if (potentialParent.children.has(current.name)) {
-					current = potentialParent;
-					found = true;
-					break;
-				}
-			}
-			if (!found) break;
+		
+		// Recursively process children
+		for (const [_, childNode] of node.children) {
+			this.propagateFolderPaths(childNode);
 		}
+	}
 
-		// If no files found in the tree, return empty string (vault root)
-		return "";
+	// Updated helper method to use the stored folder path
+	private findParentFolder(node: DendronNode): string {
+		// Simply return the stored folder path
+		return node.folderPath;
 	}
 
 	async buildDendronTree(container: HTMLElement) {
@@ -176,112 +241,130 @@ class DendronTreeView extends ItemView {
 			.sort(([aKey], [bKey]) => aKey.localeCompare(bKey));
 
 		sortedChildren.forEach(([name, childNode], index) => {
-			const item = parentEl.createEl('div', { cls: 'tree-item is-clickable' });
+			const item = parentEl.createEl('div', { cls: 'tree-item' });
 			
 			const itemSelf = item.createEl('div', { 
-				cls: 'tree-item-self is-clickable' + (childNode.children.size > 0 ? ' mod-collapsible' : '')
+				cls: 'tree-item-self' + (childNode.children.size > 0 ? ' mod-collapsible' : '')
 			});
 
+			// Create a container for the toggle button and name
+			const contentWrapper = itemSelf.createEl('div', { cls: 'tree-item-content' });
+
+			// Add toggle button if has children
 			if (childNode.children.size > 0) {
-				const iconDiv = itemSelf.createEl('div', { cls: 'tree-item-icon collapse-icon' });
-				iconDiv.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="svg-icon right-triangle"><path d="M3 8L12 17L21 8"></path></svg>`;
+				const toggleButton = contentWrapper.createEl('div', { cls: 'tree-item-icon collapse-icon is-clickable' });
+				toggleButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="svg-icon right-triangle"><path d="M3 8L12 17L21 8"></path></svg>`;
+				
+				// Handle toggle button click
+				toggleButton.addEventListener('click', (event) => {
+					event.stopPropagation();
+					item.toggleClass('is-collapsed', !item.hasClass('is-collapsed'));
+					const triangle = toggleButton.querySelector('.right-triangle');
+					if (triangle) {
+						triangle.classList.toggle('is-collapsed');
+					}
+				});
+			} else {
+				// Add a spacer div to maintain alignment
+				contentWrapper.createEl('div', { cls: 'tree-item-icon-spacer' });
+			}
+
+			// Check if a folder note exists for folders
+			let folderNoteExists = false;
+			if (childNode.children.size > 0) {
+				const folderNotePath = `${childNode.folderPath ? childNode.folderPath + '/' : ''}${name}.md`;
+				const folderNote = this.app.vault.getAbstractFileByPath(folderNotePath);
+				folderNoteExists = folderNote instanceof TFile;
 			}
 
 			// Display name without the path
 			const displayName = name.split('.').pop() || name;
-			const innerDiv = itemSelf.createEl('div', { 
-				cls: 'tree-item-inner' + (!childNode.file && childNode.isFile ? ' mod-create-new' : ''),
+			const innerDiv = contentWrapper.createEl('div', { 
+				cls: 'tree-item-inner' + (!childNode.file && childNode.isFile ? ' mod-create-new' : 
+					(childNode.file || folderNoteExists ? ' is-clickable' : '')),
 				text: displayName
 			});
+
+			// Add a "+" button for non-existent files or folders without folder notes
+			if ((!childNode.file && childNode.isFile) || (childNode.children.size > 0 && !folderNoteExists)) {
+				const createButton = itemSelf.createEl('div', { 
+					cls: 'tree-item-create-button is-clickable',
+					attr: { title: childNode.children.size > 0 ? 'Create folder note' : 'Create file' }
+				});
+				createButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="svg-icon"><path d="M12 5v14M5 12h14"></path></svg>`;
+				
+				// Handle create button click
+				createButton.addEventListener('click', async (event) => {
+					event.stopPropagation();
+					
+					// Handle folder note creation
+					if (childNode.children.size > 0) {
+						const folderNotePath = `${childNode.folderPath ? childNode.folderPath + '/' : ''}${name}.md`;
+						let folderNote = this.app.vault.getAbstractFileByPath(folderNotePath);
+						
+						if (!folderNote) {
+							try {
+								folderNote = await this.app.vault.create(folderNotePath, '');
+								new Notice('Created folder note: ' + folderNotePath);
+							} catch (error) {
+								console.error('Failed to create folder note:', error);
+								new Notice('Failed to create folder note: ' + folderNotePath);
+							}
+						}
+
+						if (folderNote instanceof TFile) {
+							const leaf = this.app.workspace.getLeaf(false);
+							if (leaf) {
+								await leaf.openFile(folderNote);
+							}
+						}
+					}
+					
+					// Handle file creation for non-existent files
+					if (childNode.isFile && !childNode.file) {
+						try {
+							// Use the stored folder path for file creation
+							const fullPath = `${childNode.folderPath ? childNode.folderPath + '/' : ''}${name}.md`;
+							const file = await this.app.vault.create(fullPath, '');
+							new Notice('Created file: ' + fullPath);
+							const leaf = this.app.workspace.getLeaf(false);
+							if (leaf) {
+								await leaf.openFile(file);
+							}
+						} catch (error) {
+							console.error('Failed to create file:', error);
+							new Notice('Failed to create file: ' + name + '.md');
+						}
+					}
+				});
+			}
 
 			if (!childNode.isFile && childNode.children.size === 0) {
 				itemSelf.createEl('div', { cls: 'structured-tree-not-found' });
 			}
 
-			// Track clicks for double-click detection
-			let clickTimeout: NodeJS.Timeout | null = null;
-			let preventSingleClick = false;
-
-			// Handle click events
-			itemSelf.addEventListener('click', async (event) => {
-				if (preventSingleClick) {
-					preventSingleClick = false;
-					return;
-				}
-
-				// Handle single click
-				if (childNode.children.size > 0) {
-					item.toggleClass('is-collapsed', !item.hasClass('is-collapsed'));
-					const triangle = itemSelf.querySelector('.right-triangle');
-					if (triangle) {
-						triangle.classList.toggle('is-collapsed');
-					}
-				}
-
-				if (childNode.isFile && childNode.file) {
-					const leaf = this.app.workspace.getLeaf(false);
-					if (leaf) {
-						await leaf.openFile(childNode.file);
-					}
-				}
-			});
-
-			// Handle double-click events
-			itemSelf.addEventListener('dblclick', async (event) => {
-				preventSingleClick = true;
-				
-				if (clickTimeout) {
-					clearTimeout(clickTimeout);
-					clickTimeout = null;
-				}
-
-				// Handle folder note creation/opening
-				if (childNode.children.size > 0) {
-					const parentFolder = this.findParentFolder(childNode);
-					const folderNotePath = parentFolder 
-						? `${parentFolder}/${name}.md`
-						: `${name}.md`;
-
-					let folderNote = this.app.vault.getAbstractFileByPath(folderNotePath);
-					
-					if (!folderNote) {
-						try {
-							folderNote = await this.app.vault.create(folderNotePath, '');
-							new Notice('Created folder note: ' + folderNotePath);
-						} catch (error) {
-							console.error('Failed to create folder note:', error);
-							new Notice('Failed to create folder note: ' + folderNotePath);
-						}
-					}
-
-					if (folderNote instanceof TFile) {
+			// Handle click events on the name only - but only for existing files and folders with folder notes
+			if (childNode.file || (childNode.children.size > 0 && folderNoteExists)) {
+				innerDiv.addEventListener('click', async (event) => {
+					if (childNode.isFile && childNode.file) {
 						const leaf = this.app.workspace.getLeaf(false);
 						if (leaf) {
-							await leaf.openFile(folderNote);
+							await leaf.openFile(childNode.file);
+						}
+					} else if (childNode.children.size > 0 && folderNoteExists) {
+						// Try to open folder note if it exists
+						const folderNotePath = `${childNode.folderPath ? childNode.folderPath + '/' : ''}${name}.md`;
+						const folderNote = this.app.vault.getAbstractFileByPath(folderNotePath);
+						
+						if (folderNote instanceof TFile) {
+							const leaf = this.app.workspace.getLeaf(false);
+							if (leaf) {
+								await leaf.openFile(folderNote);
+							}
 						}
 					}
-				}
-
-				// Handle file creation for non-existent files
-				if (childNode.isFile && !childNode.file) {
-					try {
-						const parentFolder = this.findParentFolder(childNode);
-						const fullPath = parentFolder 
-							? `${parentFolder}/${name}.md`
-							: `${name}.md`;
-
-						const file = await this.app.vault.create(fullPath, '');
-						new Notice('Created file: ' + fullPath);
-						const leaf = this.app.workspace.getLeaf(false);
-						if (leaf) {
-							await leaf.openFile(file);
-						}
-					} catch (error) {
-						console.error('Failed to create file:', error);
-						new Notice('Failed to create file: ' + name + '.md');
-					}
-				}
-			});
+				});
+			}
 
 			if (childNode.children.size > 0) {
 				const childrenDiv = item.createEl('div', { 
@@ -292,6 +375,38 @@ class DendronTreeView extends ItemView {
 				this.renderDendronNode(childNode, childrenDiv, '');
 			}
 		});
+	}
+
+	// Set up a MutationObserver to detect when the view is moved
+	private setupMutationObserver() {
+		// Get the plugin instance
+		const plugin = (this.app as any).plugins.plugins['obsidian-another-dendron-plugin'] as MyPlugin;
+		if (!plugin) return;
+
+		// Create a MutationObserver to watch for DOM changes
+		const observer = new MutationObserver((mutations) => {
+			// Check if any of the mutations involve our view
+			const shouldCheck = mutations.some(mutation => {
+				// Check if our view is involved in this mutation
+				return mutation.target.contains(this.containerEl) || 
+					   this.containerEl.contains(mutation.target as Node);
+			});
+
+			if (shouldCheck) {
+				setTimeout(() => plugin.detectAndSavePosition(), 100);
+			}
+		});
+
+		// Start observing the entire app container for changes
+		observer.observe(document.body, { 
+			childList: true, 
+			subtree: true,
+			attributes: true,
+			attributeFilter: ['class', 'style']
+		});
+
+		// Store the observer so we can disconnect it later
+		(this as any).observer = observer;
 	}
 }
 
@@ -321,35 +436,128 @@ export default class MyPlugin extends Plugin {
 			}
 		});
 
-		// This adds a settings tab so the user can configure various aspects of the plugin
-		this.addSettingTab(new SampleSettingTab(this.app, this));
+		// Restore the view state when the layout is ready
+		this.app.workspace.onLayoutReady(() => this.initLeaf());
 	}
 
-	async activateView() {
+	async initLeaf(): Promise<void> {
 		// If the view is already open, do nothing
-		if (this.app.workspace.getLeavesOfType(FILE_TREE_VIEW_TYPE).length > 0) {
+		const leaves = this.app.workspace.getLeavesOfType(FILE_TREE_VIEW_TYPE);
+		if (leaves.length) {
 			return;
 		}
 
-		// Open the view in the right sidebar
-		const leaf = this.app.workspace.getRightLeaf(false);
-		if (leaf) {
-			await leaf.setViewState({
-				type: FILE_TREE_VIEW_TYPE,
-				active: true,
-			} as ViewState);
+		// Try to get the saved workspace data
+		const savedData = await this.loadData();
+		
+		// Create the leaf in the saved position or default to right
+		let leaf: WorkspaceLeaf | null;
+		if (savedData?.position === 'left') {
+			leaf = this.app.workspace.getLeftLeaf(false);
+		} else {
+			leaf = this.app.workspace.getRightLeaf(false);
 		}
 
-		// Reveal the leaf
-		const newLeaf = this.app.workspace.getLeavesOfType(FILE_TREE_VIEW_TYPE)[0];
-		if (newLeaf) {
-			this.app.workspace.revealLeaf(newLeaf);
+		if (!leaf) return;
+
+		// Set the view state
+		await leaf.setViewState({
+			type: FILE_TREE_VIEW_TYPE,
+			active: true
+		} as ViewState);
+	}
+
+	async activateView() {
+		// If the view is already open, reveal it
+		const existing = this.app.workspace.getLeavesOfType(FILE_TREE_VIEW_TYPE);
+		if (existing.length > 0) {
+			this.app.workspace.revealLeaf(existing[0]);
+			
+			// Check and update position immediately
+			this.detectAndSavePosition();
+			return;
 		}
+
+		// Try to get the saved position
+		const savedData = await this.loadData();
+		
+		// Create the leaf in the saved position or default to right
+		let leaf: WorkspaceLeaf | null;
+		if (savedData?.position === 'left') {
+			leaf = this.app.workspace.getLeftLeaf(false);
+		} else {
+			leaf = this.app.workspace.getRightLeaf(false);
+		}
+
+		if (!leaf) return;
+
+		// Set the view state
+		await leaf.setViewState({
+			type: FILE_TREE_VIEW_TYPE,
+			active: true
+		} as ViewState);
+
+		// Register a one-time event to detect position after the view is fully created
+		setTimeout(() => {
+			this.detectAndSavePosition();
+			this.setupDragListeners();
+		}, 500);
+
+		// Track position changes
+		this.registerEvent(
+			this.app.workspace.on('layout-change', () => {
+				setTimeout(() => {
+					this.detectAndSavePosition();
+				}, 100);
+			})
+		);
+
+		this.app.workspace.revealLeaf(leaf);
+	}
+
+	// Helper method to detect and save the current position
+	async detectAndSavePosition() {
+		const leaves = this.app.workspace.getLeavesOfType(FILE_TREE_VIEW_TYPE);
+		if (leaves.length === 0) {
+			return;
+		}
+		
+		const leaf = leaves[0];
+		
+		// Get the parent element of the leaf
+		const view = leaf.view as DendronTreeView;
+		if (!view) {
+			return;
+		}
+		
+		const leafEl = view.containerEl;
+		
+		// Check if the leaf is in the left sidebar by examining its DOM position
+		const leftSplit = leafEl.closest('.mod-left-split');
+		const rightSplit = leafEl.closest('.mod-right-split');
+		
+		const isInLeftSidebar = leftSplit !== null;
+		
+		// Get current settings
+		const currentSettings = await this.loadData();
+		const newPosition = isInLeftSidebar ? 'left' : 'right';
+		
+		// Always save the position to ensure it's updated
+		currentSettings.position = newPosition;
+		await this.saveData(currentSettings);
+		
+		// Update the settings object too
+		this.settings.position = newPosition;
 	}
 
 	onunload() {
 		// Unregister the view when the plugin is disabled
 		this.app.workspace.detachLeavesOfType(FILE_TREE_VIEW_TYPE);
+
+		// Disconnect the MutationObserver if it exists
+		if ((this as any).observer) {
+			(this as any).observer.disconnect();
+		}
 	}
 
 	async loadSettings() {
@@ -358,6 +566,29 @@ export default class MyPlugin extends Plugin {
 
 	async saveSettings() {
 		await this.saveData(this.settings);
+	}
+
+	// Set up drag listeners to detect when the view is moved
+	setupDragListeners() {
+		// Find all drag handles in the app
+		const dragHandles = document.querySelectorAll('.workspace-tab-header-tab-list, .workspace-tab-header, .mod-drag-handle');
+		
+		// Add event listeners to all drag handles
+		dragHandles.forEach(handle => {
+			handle.addEventListener('mouseup', () => {
+				setTimeout(() => this.detectAndSavePosition(), 200);
+			});
+		});
+		
+		// Also listen for dragend events on the document
+		document.addEventListener('dragend', () => {
+			setTimeout(() => this.detectAndSavePosition(), 200);
+		});
+		
+		// Listen for the end of a drag operation
+		document.addEventListener('mouseup', () => {
+			setTimeout(() => this.detectAndSavePosition(), 200);
+		});
 	}
 }
 
@@ -374,31 +605,5 @@ class SampleModal extends Modal {
 	onClose() {
 		const {contentEl} = this;
 		contentEl.empty();
-	}
-}
-
-class SampleSettingTab extends PluginSettingTab {
-	plugin: MyPlugin;
-
-	constructor(app: App, plugin: MyPlugin) {
-		super(app, plugin);
-		this.plugin = plugin;
-	}
-
-	display(): void {
-		const {containerEl} = this;
-
-		containerEl.empty();
-
-		new Setting(containerEl)
-			.setName('Setting #1')
-			.setDesc('It\'s a secret')
-			.addText(text => text
-				.setPlaceholder('Enter your secret')
-				.setValue(this.plugin.settings.mySetting)
-				.onChange(async (value) => {
-					this.plugin.settings.mySetting = value;
-					await this.plugin.saveSettings();
-				}));
 	}
 }
