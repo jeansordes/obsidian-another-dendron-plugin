@@ -219,7 +219,7 @@ class DendronTreeView extends ItemView {
 				}
 
 				if (childNode.isFile && childNode.file) {
-					const leaf = this.app.workspace.getLeaf('tab');
+					const leaf = this.app.workspace.getLeaf(false);
 					if (leaf) {
 						await leaf.openFile(childNode.file);
 					}
@@ -255,7 +255,7 @@ class DendronTreeView extends ItemView {
 					}
 
 					if (folderNote instanceof TFile) {
-						const leaf = this.app.workspace.getLeaf('tab');
+						const leaf = this.app.workspace.getLeaf(false);
 						if (leaf) {
 							await leaf.openFile(folderNote);
 						}
@@ -272,7 +272,7 @@ class DendronTreeView extends ItemView {
 
 						const file = await this.app.vault.create(fullPath, '');
 						new Notice('Created file: ' + fullPath);
-						const leaf = this.app.workspace.getLeaf('tab');
+						const leaf = this.app.workspace.getLeaf(false);
 						if (leaf) {
 							await leaf.openFile(file);
 						}
