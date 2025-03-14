@@ -6,6 +6,7 @@
     --button-icon-size: 14px;
     --button-size: calc(var(--line-height));
     --border-radius: 3px;
+    --accent-color: var(--ax3);
 
     * {
         user-select: none;
@@ -115,5 +116,11 @@
         width: var(--button-icon-size);
         height: var(--button-icon-size);
         transform: translate(-4px, 2px);
+    }
+
+    /* Style for the currently active file */
+    .tree-item-inner.is-active, .tree-item-inner.is-active:hover {
+        color: var(--text-on-accent);
+        background-color: var(--accent-color);
     }
 }

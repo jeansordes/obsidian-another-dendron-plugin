@@ -38,6 +38,23 @@ export default class MyPlugin extends Plugin {
 			}
 		});
 
+		// Add a command to show the current file in the Dendron Tree View
+		this.addCommand({
+			id: 'show-file-in-dendron-tree',
+			name: 'Show File in Dendron Tree View',
+			checkCallback: (checking: boolean) => {
+				// Only enable the command if there's an active file
+				const activeFile = this.app.workspace.getActiveFile();
+				if (!activeFile) return false;
+				
+				if (!checking) {
+					this.showFileInDendronTree(activeFile);
+				}
+				
+				return true;
+			}
+		});
+
 		// Use a timeout to ensure we don't initialize too early
         // and create a new leaf before checking for existing leaves
         // resulting in a race condition, with 2 leaves created in the end
@@ -45,7 +62,7 @@ export default class MyPlugin extends Plugin {
 			this.app.workspace.onLayoutReady(() => {
 				this.checkAndInitializeView();
 			});
-		}, 100);
+		}, 500);
 	}
 
 	private async checkAndInitializeView() {
@@ -54,6 +71,8 @@ export default class MyPlugin extends Plugin {
 		
 		// If we already have a leaf with our view type, don't create another one
 		if (leaves.length > 0) {
+			// Highlight the active file in the existing view
+			this.highlightActiveFileInView(leaves[0]);
 			return;
 		}
 		
@@ -72,27 +91,36 @@ export default class MyPlugin extends Plugin {
 					active: false
 				} as ViewState);
 			}
+			// Highlight the active file after reregistering the view
+			if (potentialDendronLeaves.length > 0) {
+				this.highlightActiveFileInView(potentialDendronLeaves[0]);
+			}
 			return;
 		}
 		
 		// If no existing leaves are found, create a new one
-		await this.initLeaf();
+		const newLeaf = await this.initLeaf();
+		if (newLeaf) {
+			this.highlightActiveFileInView(newLeaf);
+		}
 	}
 
-	async initLeaf(): Promise<void> {
+	async initLeaf(): Promise<WorkspaceLeaf | null> {
 		// Set flag to indicate we're initializing
 		this.isInitializing = true;
 		
 		try {
 			// Always create the view in the left panel
 			const leaf = this.app.workspace.getLeftLeaf(false);
-			if (!leaf) return;
+			if (!leaf) return null;
 			
 			// Set the view state
 			await leaf.setViewState({
 				type: FILE_TREE_VIEW_TYPE,
 				active: false // Set to false to avoid automatically focusing the view
 			} as ViewState);
+			
+			return leaf;
 		} finally {
 			// Reset the flag
 			this.isInitializing = false;
@@ -116,6 +144,45 @@ export default class MyPlugin extends Plugin {
 				active: true
 			} as ViewState);
 			this.app.workspace.revealLeaf(leaf);
+		}
+	}
+
+	/**
+	 * Show the current file in the Dendron Tree View
+	 */
+	private async showFileInDendronTree(file: TFile): Promise<void> {
+		// First, make sure the view is open
+		await this.activateView();
+		
+		// Get the Dendron Tree View instance
+		const leaves = this.app.workspace.getLeavesOfType(FILE_TREE_VIEW_TYPE);
+		if (leaves.length === 0) return;
+		
+		const dendronView = leaves[0].view as DendronTreeView;
+		
+		// Trigger file highlighting
+		if (dendronView && typeof dendronView.highlightFile === 'function') {
+			dendronView.highlightFile(file);
+		}
+	}
+
+	/**
+	 * Highlight the active file in the specified view
+	 */
+	private highlightActiveFileInView(leaf: WorkspaceLeaf): void {
+		// Get the active file
+		const activeFile = this.app.workspace.getActiveFile();
+		if (!activeFile) return;
+		
+		// Get the Dendron Tree View instance
+		const dendronView = leaf.view as DendronTreeView;
+		
+		// Trigger file highlighting
+		if (dendronView && typeof dendronView.highlightFile === 'function') {
+			// Use a small timeout to ensure the view is fully rendered
+			setTimeout(() => {
+				dendronView.highlightFile(activeFile);
+			}, 100);
 		}
 	}
 

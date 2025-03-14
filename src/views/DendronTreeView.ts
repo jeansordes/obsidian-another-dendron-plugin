@@ -6,6 +6,8 @@ import { buildDendronStructure } from '../utils/treeUtils';
 export default class DendronTreeView extends ItemView {
     private lastBuiltTree: DendronNode | null = null;
     private container: HTMLElement | null = null;
+    private activeFile: TFile | null = null;
+    private fileItemsMap: Map<string, HTMLElement> = new Map();
 
     constructor(leaf: WorkspaceLeaf) {
         super(leaf);
@@ -34,8 +36,21 @@ export default class DendronTreeView extends ItemView {
         // Register file system events
         this.registerFileEvents();
 
+        // Register event for active file change
+        this.registerActiveFileEvents();
+
         // Build the dendron tree
         await this.buildDendronTree(treeContainer);
+
+        // Get the active file when the view is first opened
+        const activeFile = this.app.workspace.getActiveFile();
+        if (activeFile) {
+            this.activeFile = activeFile;
+            // Use a small timeout to ensure the tree is fully rendered
+            setTimeout(() => {
+                this.highlightActiveFile();
+            }, 100);
+        }
     }
 
     /**
@@ -57,10 +72,69 @@ export default class DendronTreeView extends ItemView {
         );
     }
 
+    /**
+     * Register events for active file changes
+     */
+    private registerActiveFileEvents(): void {
+        this.registerEvent(
+            this.app.workspace.on('file-open', (file) => {
+                if (file) {
+                    this.activeFile = file;
+                    this.highlightActiveFile();
+                }
+            })
+        );
+    }
+
+    /**
+     * Public method to highlight a specific file in the tree view
+     * This can be called from the main plugin
+     */
+    public highlightFile(file: TFile): void {
+        this.activeFile = file;
+        this.highlightActiveFile();
+    }
+
+    /**
+     * Highlight the active file in the tree view and scroll it into view
+     */
+    private highlightActiveFile(): void {
+        if (!this.activeFile || !this.container) return;
+
+        // Clear previous active file highlighting
+        this.container.querySelectorAll('.tree-item-inner.is-active').forEach(el => {
+            el.removeClass('is-active');
+        });
+
+        // Find the element for the active file
+        const filePath = this.activeFile.path;
+        const fileItem = this.fileItemsMap.get(filePath);
+
+        if (fileItem) {
+            // Add active class
+            fileItem.addClass('is-active');
+            
+            // Scroll into view
+            fileItem.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            
+            // Ensure all parent folders are expanded
+            let parent = fileItem.closest('.tree-item');
+            while (parent) {
+                if (parent.hasClass('is-collapsed')) {
+                    parent.removeClass('is-collapsed');
+                }
+                const parentElement = parent.parentElement;
+                parent = parentElement ? parentElement.closest('.tree-item') : null;
+            }
+        }
+    }
+
     async refresh() {
         if (this.container) {
             this.container.empty();
+            this.fileItemsMap.clear();
             await this.buildDendronTree(this.container);
+            this.highlightActiveFile();
         }
     }
 
@@ -199,6 +273,15 @@ export default class DendronTreeView extends ItemView {
         // Add click handler for existing resources
         if (isClickable) {
             this.addClickHandler(innerDiv, node, name, folderNoteExists);
+            
+            // Store reference to file item for highlighting
+            if (node.nodeType === DendronNodeType.FILE && node.obsidianResource) {
+                const file = node.obsidianResource as TFile;
+                this.fileItemsMap.set(file.path, innerDiv);
+            } else if (node.children.size > 0 && folderNoteExists) {
+                const folderNotePath = `${node.realPath ? node.realPath + '/' : ''}${name}.md`;
+                this.fileItemsMap.set(folderNotePath, innerDiv);
+            }
         }
     }
 
@@ -232,6 +315,8 @@ export default class DendronTreeView extends ItemView {
         const leaf = this.app.workspace.getLeaf(false);
         if (leaf) {
             await leaf.openFile(file);
+            this.activeFile = file;
+            this.highlightActiveFile();
         }
     }
 
@@ -283,5 +368,7 @@ export default class DendronTreeView extends ItemView {
         // Clear references
         this.container = null;
         this.lastBuiltTree = null;
+        this.fileItemsMap.clear();
+        this.activeFile = null;
     }
 } 
