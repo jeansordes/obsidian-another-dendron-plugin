@@ -12,6 +12,8 @@
     --button-size: calc(var(--line-height));
     --border-radius: 3px;
     --accent-color: var(--ax3);
+    --color-text-clickable: var(--tx2);
+    --color-text-hover: var(--tx1);
 
     .dendron-tree-list {
         list-style: none;
@@ -36,7 +38,7 @@
     }
 
     .tree-item-inner.is-clickable {
-        color: var(--nav-item-color-hover);
+        color: var(--color-text-hover);
         background-color: var(--bg-clickable);
         cursor: pointer;
     }
@@ -69,12 +71,12 @@
     }
 
     .collapse-icon svg {
-        color: var(--nav-collapse-icon-color);
+        color: var(--color-text-clickable);
         transform: translate(-0.5px, 0px);
     }
 
     .collapse-icon:hover svg {
-        color: var(--nav-item-color-hover);
+        color: var(--color-text-hover);
     }
 
     .collapse-icon:before {
@@ -95,6 +97,14 @@
 
     .is-clickable {
         cursor: pointer;
+    }
+
+    .tree-item-create-button {
+        color: var(--color-text-clickable);
+    }
+
+    .tree-item-create-button:hover {
+        color: var(--color-text-hover);
     }
 
     .tree-item-create-button:before {
@@ -165,7 +175,7 @@
     height: var(--button-size);
     border-radius: var(--border-radius);
     background-color: var(--bg-clickable);
-    color: var(--tx2);
+    color: var(--color-text-clickable);
     cursor: pointer;
     transition: background-color 0.1s ease-in-out;
     padding: 0;
@@ -173,6 +183,7 @@
 
 .dendron-tree-toggle-button:hover {
     background-color: var(--bg-hover);
+    color: var(--color-text-hover);
 }
 
 .dendron-tree-toggle-icon {
