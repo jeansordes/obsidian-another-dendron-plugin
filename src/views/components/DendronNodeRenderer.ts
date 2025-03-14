@@ -15,8 +15,10 @@ export class DendronNodeRenderer {
      * Render a node in the tree
      */
     renderDendronNode(node: DendronNode, parentEl: HTMLElement, expandedNodes: Set<string>) {
-        // Reverse the order of the children to build the tree in the correct order
-        const sortedChildren = Array.from(node.children.entries()).reverse();
+        // Sort children by name
+        const sortedChildren = Array.from(node.children.entries())
+            .sort(([aKey], [bKey]) => aKey.localeCompare(bKey));
+
 
         // Use DocumentFragment for batch DOM operations
         const fragment = document.createDocumentFragment();
@@ -24,15 +26,15 @@ export class DendronNodeRenderer {
         sortedChildren.forEach(([name, childNode]) => {
             const item = document.createElement('div');
             item.className = 'tree-item';
-            
+
             // Add data-path attribute for tracking expanded state
             item.setAttribute('data-path', name);
-            
+
             // Set initial collapsed state based on saved state
             if (!expandedNodes.has(name)) {
                 item.classList.add('is-collapsed');
             }
-            
+
             const hasChildren = childNode.children.size > 0;
 
             const itemSelf = document.createElement('div');
@@ -45,7 +47,7 @@ export class DendronNodeRenderer {
             itemSelf.appendChild(contentWrapper);
 
             this.renderToggleButton(contentWrapper, item, hasChildren, expandedNodes);
-            
+
             // If the node is a folder, add a folder icon
             if (childNode.nodeType === DendronNodeType.FOLDER) {
                 this.renderFolderIcon(contentWrapper);
@@ -67,10 +69,10 @@ export class DendronNodeRenderer {
 
                 this.renderDendronNode(childNode, childrenDiv, expandedNodes);
             }
-            
+
             fragment.appendChild(item);
         });
-        
+
         // Append all items at once
         parentEl.appendChild(fragment);
     }
@@ -83,16 +85,16 @@ export class DendronNodeRenderer {
             const toggleButton = document.createElement('div');
             toggleButton.className = 'tree-item-icon collapse-icon is-clickable';
             contentWrapper.appendChild(toggleButton);
-            
+
             setIcon(toggleButton, 'right-triangle');
 
             // Handle toggle button click
             toggleButton.addEventListener('click', (event) => {
                 event.stopPropagation();
-                
+
                 // Toggle collapsed state
                 const isCollapsed = item.classList.toggle('is-collapsed');
-                
+
                 // Update expanded nodes set
                 const path = item.getAttribute('data-path');
                 if (path) {
@@ -102,7 +104,7 @@ export class DendronNodeRenderer {
                         expandedNodes.add(path);
                     }
                 }
-                
+
                 // Toggle triangle icon
                 const triangle = toggleButton.querySelector('.right-triangle');
                 if (triangle) {
@@ -125,7 +127,7 @@ export class DendronNodeRenderer {
         folderIcon.className = 'tree-item-folder-icon';
         folderIcon.setAttribute('title', t('tooltipFolder'));
         contentWrapper.appendChild(folderIcon);
-        
+
         setIcon(folderIcon, 'folder');
     }
 
@@ -133,34 +135,34 @@ export class DendronNodeRenderer {
      * Render node name with appropriate styling
      */
     private renderNodeName(
-        contentWrapper: HTMLElement, 
+        contentWrapper: HTMLElement,
         node: DendronNode
     ): void {
         const displayName = node.dendronPath.split('.').pop() || node.dendronPath;
         const isClickable = node.nodeType === DendronNodeType.FILE;
         const isCreateNew = node.nodeType === DendronNodeType.VIRTUAL;
-        
+
         let className = 'tree-item-inner';
         if (isCreateNew) className += ' mod-create-new';
         if (isClickable) className += ' is-clickable';
-        
+
         const innerDiv = document.createElement('div');
         innerDiv.className = className;
         innerDiv.textContent = displayName;
-        
+
         // Add title attribute to show full path
         if (node.nodeType === DendronNodeType.FILE) {
             innerDiv.setAttribute('title', node.folderPath ? `${node.folderPath}/${displayName}.md` : `${displayName}.md`);
         } else if (node.nodeType === DendronNodeType.FOLDER) {
             innerDiv.setAttribute('title', node.folderPath ? `${node.folderPath}/${displayName}` : displayName);
         }
-        
+
         contentWrapper.appendChild(innerDiv);
 
         // Add click handler for existing resources
         if (isClickable) {
             this.addClickHandler(innerDiv, node);
-            
+
             // Store reference to file item for highlighting
             if (node.nodeType === DendronNodeType.FILE && node.obsidianResource) {
                 const file = node.obsidianResource as TFile;
@@ -176,7 +178,7 @@ export class DendronNodeRenderer {
      * Add click handler to open files
      */
     private addClickHandler(
-        element: HTMLElement, 
+        element: HTMLElement,
         node: DendronNode
     ): void {
         element.addEventListener('click', async () => {
@@ -202,14 +204,12 @@ export class DendronNodeRenderer {
     private renderCreateButton(itemSelf: HTMLElement, node: DendronNode, name: string): void {
         const createButton = document.createElement('div');
         createButton.className = 'tree-item-create-button is-clickable';
-        
+
         // Add title attribute to show the path of the new file
-        console.log(node);
-        const notePath = node.folderPath ? `${node.folderPath}/${node.filePath}.md` : `${node.filePath}.md`;
-        createButton.setAttribute('title', t('tooltipCreateNote', { path: notePath }));
-        
+        createButton.setAttribute('title', t('tooltipCreateNote', { path: node.filePath }));
+
         itemSelf.appendChild(createButton);
-        setIcon(createButton, 'plus');
+        setIcon(createButton, 'square-pen');
 
         // Handle create button click
         createButton.addEventListener('click', async (event) => {
@@ -222,17 +222,14 @@ export class DendronNodeRenderer {
      * Create and open a new note
      */
     private async createAndOpenNote(node: DendronNode, name: string): Promise<void> {
-        const dendronFolderPath = node.folderPath.replace('/', '.');
-        const baseName = name.replace(dendronFolderPath + '.', '');
-        const notePath = node.folderPath + '/' + baseName + '.md';
-        let note = this.app.vault.getAbstractFileByPath(notePath);
+        let note = this.app.vault.getAbstractFileByPath(node.filePath);
 
         if (!note) {
             try {
-                note = await this.app.vault.create(notePath, '');
-                new Notice(t('noticeCreatedNote', { path: notePath }));
+                note = await this.app.vault.create(node.filePath, '');
+                new Notice(t('noticeCreatedNote', { path: node.filePath }));
             } catch (error) {
-                new Notice(t('noticeFailedCreateNote', { path: notePath }));
+                new Notice(t('noticeFailedCreateNote', { path: node.filePath }));
                 return;
             }
         }

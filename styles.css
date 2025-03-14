@@ -126,7 +126,7 @@
     .tree-item-create-button svg {
         width: var(--button-icon-size);
         height: var(--button-icon-size);
-        transform: translate(-4px, 2px);
+        transform: translate(-4px, 3px);
     }
 
     /* Style for the currently active file */
@@ -150,9 +150,10 @@
         padding: 4px;
         border-bottom: 1px solid var(--background-modifier-border);
         flex-shrink: 0;
-        /* Prevent header from shrinking */
+        position: sticky;
+        top: 0;
+        background-color: var(--background-primary);
         z-index: 10;
-        /* Ensure header stays on top */
     }
 
     /* Scrollable container for the tree */
