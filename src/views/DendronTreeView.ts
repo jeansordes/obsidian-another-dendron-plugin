@@ -222,10 +222,6 @@ export default class DendronTreeView extends ItemView {
                 }
             }
 
-            if (!childNode.isRealFile && childNode.children.size === 0) {
-                itemSelf.createEl('div', { cls: 'structured-tree-not-found' });
-            }
-
             // Handle click events on the name only - but only for existing files and folders with folder notes
             if (childNode.file || (childNode.children.size > 0 && folderNoteExists)) {
                 innerDiv.addEventListener('click', async (event) => {
