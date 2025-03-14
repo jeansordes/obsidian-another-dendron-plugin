@@ -1,5 +1,5 @@
 import { App, ItemView, Notice, TFile, WorkspaceLeaf, setIcon } from 'obsidian';
-import { DendronNode, FILE_TREE_VIEW_TYPE } from '../models/types';
+import { DendronNode, DendronNodeType, FILE_TREE_VIEW_TYPE } from '../models/types';
 import { buildDendronStructure } from '../utils/treeUtils';
 import MyPlugin from '../../main';
 
@@ -166,73 +166,75 @@ export default class DendronTreeView extends ItemView {
             // Check if a folder note exists for folders
             let folderNoteExists = false;
             if (childNode.children.size > 0) {
-                const folderNotePath = `${childNode.folderPath ? childNode.folderPath + '/' : ''}${name}.md`;
+                const folderNotePath = `${childNode.realPath ? childNode.realPath + '/' : ''}${name}.md`;
                 const folderNote = this.app.vault.getAbstractFileByPath(folderNotePath);
                 folderNoteExists = folderNote instanceof TFile;
+            }
+
+            // If the node is a folder, add a folder icon
+            if (childNode.nodeType === DendronNodeType.FOLDER) {
+                const folderIcon = contentWrapper.createEl('div', {
+                    cls: 'tree-item-folder-icon',
+                    attr: { title: 'Folder' }
+                });
+                setIcon(folderIcon, 'folder');
             }
 
             // Display name without the path
             const displayName = name.split('.').pop() || name;
             const innerDiv = contentWrapper.createEl('div', {
-                cls: 'tree-item-inner' + (!childNode.file && childNode.isRealFile ? ' mod-create-new' :
-                    (childNode.file || folderNoteExists ? ' is-clickable' : '')),
+                cls: 'tree-item-inner' + (!childNode.obsidianResource && childNode.nodeType === DendronNodeType.FILE ? ' mod-create-new' :
+                    (childNode.obsidianResource || folderNoteExists ? ' is-clickable' : '')),
                 text: displayName
             });
 
-            // Add a "+" button for non-existent files or folders without folder notes
-            if ((!childNode.file && childNode.isRealFile) || (childNode.children.size > 0 && !folderNoteExists)) {
-                if (childNode.isRealFolder) {
-                    const folderIcon = itemSelf.createEl('div', {
-                        cls: 'tree-item-folder-icon',
-                        attr: { title: 'Folder' }
-                    });
-                    setIcon(folderIcon, 'folder');
-                } else if(!childNode.isRealFile) {
-                    const createButton = itemSelf.createEl('div', {
-                        cls: 'tree-item-create-button is-clickable',
-                        attr: { title: 'Create note' }
-                    });
-                    setIcon(createButton, 'plus');
+            // Add a "+" button for non-existent files that are not folders
+            if (childNode.nodeType === DendronNodeType.VIRTUAL) {
+                const createButton = itemSelf.createEl('div', {
+                    cls: 'tree-item-create-button is-clickable',
+                    attr: { title: 'Create note' }
+                });
+                setIcon(createButton, 'plus');
 
-                    // Handle create button click
-                    createButton.addEventListener('click', async (event) => {
-                        event.stopPropagation();
+                // Handle create button click
+                createButton.addEventListener('click', async (event) => {
+                    event.stopPropagation();
 
-                        const noteName = name.replace(childNode.folderPath + '.', '');
-                        const notePath = childNode.folderPath + '/' + noteName  + '.md';
-                        let note = this.app.vault.getAbstractFileByPath(notePath);
+                    const dendronFolderPath = childNode.realPath.replace('/', '.');
+                    const baseName = name.replace(dendronFolderPath + '.', '');
+                    const notePath = childNode.realPath + '/' + baseName + '.md';
+                    let note = this.app.vault.getAbstractFileByPath(notePath);
 
-                        if (!note) {
-                            try {
-                                note = await this.app.vault.create(notePath, '');
-                                new Notice('Created note: ' + notePath);
-                            } catch (error) {
-                                console.error('Failed to create note:', error);
-                                new Notice('Failed to create note: ' + notePath);
-                            }
+                    if (!note) {
+                        try {
+                            note = await this.app.vault.create(notePath, '');
+                            new Notice('Created note: ' + notePath);
+                        } catch (error) {
+                            console.error('Failed to create note:', error);
+                            new Notice('Failed to create note: ' + notePath);
                         }
+                    }
 
-                        if (note instanceof TFile) {
-                            const leaf = this.app.workspace.getLeaf(false);
-                            if (leaf) {
-                                await leaf.openFile(note);
-                            }
+                    if (note instanceof TFile) {
+                        const leaf = this.app.workspace.getLeaf(false);
+                        if (leaf) {
+                            await leaf.openFile(note);
                         }
-                    });
-                }
+                    }
+                });
             }
 
             // Handle click events on the name only - but only for existing files and folders with folder notes
-            if (childNode.file || (childNode.children.size > 0 && folderNoteExists)) {
+            if (childNode.obsidianResource || (childNode.children.size > 0 && folderNoteExists)) {
                 innerDiv.addEventListener('click', async (event) => {
-                    if (childNode.isRealFile && childNode.file) {
+                    if (childNode.nodeType === DendronNodeType.FILE && childNode.obsidianResource) {
                         const leaf = this.app.workspace.getLeaf(false);
                         if (leaf) {
-                            await leaf.openFile(childNode.file);
+                            await leaf.openFile(childNode.obsidianResource as TFile);
                         }
                     } else if (childNode.children.size > 0 && folderNoteExists) {
                         // Try to open folder note if it exists
-                        const folderNotePath = `${childNode.folderPath ? childNode.folderPath + '/' : ''}${name}.md`;
+                        const folderNotePath = `${childNode.realPath ? childNode.realPath + '/' : ''}${name}.md`;
                         const folderNote = this.app.vault.getAbstractFileByPath(folderNotePath);
 
                         if (folderNote instanceof TFile) {

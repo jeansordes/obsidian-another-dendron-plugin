@@ -51,7 +51,7 @@
     .tree-item-folder-icon svg {
         width: var(--button-icon-size);
         height: var(--button-icon-size);
-        transform: translate(-2px, 3px);
+        transform: translate(5px, 1px);
     }
 
     .tree-item.is-collapsed>.tree-item-children {

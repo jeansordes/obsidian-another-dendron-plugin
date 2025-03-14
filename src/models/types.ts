@@ -1,4 +1,4 @@
-import { TFile } from 'obsidian';
+import { TFile, TFolder } from 'obsidian';
 
 // Define the view type for our file tree view
 export const FILE_TREE_VIEW_TYPE = 'dendron-tree-view';
@@ -13,11 +13,16 @@ export const DEFAULT_SETTINGS: MyPluginSettings = {
     position: 'left'
 }
 
+export enum DendronNodeType {
+    FILE = 'file',
+    FOLDER = 'folder',
+    VIRTUAL = 'virtual'
+}
+
 export interface DendronNode {
     name: string;
+    realPath: string;
+    nodeType: DendronNodeType;
+    obsidianResource?: TFile | TFolder;
     children: Map<string, DendronNode>;
-    file?: TFile;
-    isRealFile: boolean;
-    isRealFolder: boolean;
-    folderPath: string;
 }

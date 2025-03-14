@@ -1,16 +1,16 @@
 import { TFile, TFolder } from 'obsidian';
-import { DendronNode } from '../models/types';
+import { DendronNode, DendronNodeType } from '../models/types';
 
 /**
  * Creates an empty DendronNode
  */
-export function createDendronNode(): DendronNode {
+export function createDendronNode(options: Partial<DendronNode> = {}): DendronNode {
     return {
         name: '',
         children: new Map<string, DendronNode>(),
-        isRealFile: false,
-        isRealFolder: false,
-        folderPath: ''
+        realPath: '',
+        nodeType: DendronNodeType.VIRTUAL,
+        ...options
     };
 }
 
@@ -21,57 +21,40 @@ export function buildDendronStructure(folders: TFolder[], files: TFile[]): Dendr
     const root = createDendronNode();
     const processedPaths = new Set<string>();
 
-    // create a set of all folder paths
+    // Create a set of all folder paths
     const folderPaths = new Set<string>();
     for (const folder of folders) {
-        // transform file path to dendron path
         folderPaths.add(folder.path.replace(/\//g, '.'));
     }
 
-    // First pass: create the structure and store file references
+    // Create the structure and store file references
     for (const file of files) {
-        // transform file path to dendron path
         const dendronFilePath = file.path.replace(/\//g, '.').replace(/\.md$/, '');
         const parts = dendronFilePath.split('.');
         let current = root;
-        let currentPath = '';
+        let pathSoFar = '';
         
-        // Process all possible parent paths first
-        for (let i = 0; i < parts.length - 1; i++) {
+        // Process each part of the path
+        for (let i = 0; i < parts.length; i++) {
             const part = parts[i];
-            currentPath = currentPath ? currentPath + '.' + part : part;
+            pathSoFar = pathSoFar ? `${pathSoFar}.${part}` : part;
+            const isLeaf = i === parts.length - 1;
             
-            if (!current.children.has(currentPath)) {
-                current.children.set(currentPath, {
-                    name: currentPath,
-                    children: new Map<string, DendronNode>(),
-                    isRealFile: false,
-                    isRealFolder: folderPaths.has(currentPath),
-                    folderPath: file.parent ? file.parent.path : ''
-                });
+            if (!current.children.has(pathSoFar) && !processedPaths.has(pathSoFar)) {
+                current.children.set(pathSoFar, createDendronNode({
+                    name: pathSoFar,
+                    nodeType: isLeaf ? DendronNodeType.FILE : (folderPaths.has(pathSoFar) ? DendronNodeType.FOLDER : DendronNodeType.VIRTUAL),
+                    realPath: file.parent ? file.parent.path : '',
+                    ...(isLeaf ? { obsidianResource: file } : {})
+                }));
+                processedPaths.add(pathSoFar);
             }
-            current = current.children.get(currentPath)!;
-            processedPaths.add(currentPath);
-        }
-
-        // Process the leaf (file) node
-        const leafName = parts[parts.length - 1];
-        currentPath = currentPath ? currentPath + '.' + leafName : leafName;
-        
-        if (!processedPaths.has(currentPath)) {
-            current.children.set(currentPath, {
-                name: currentPath,
-                children: new Map<string, DendronNode>(),
-                isRealFile: true,
-                isRealFolder: folderPaths.has(currentPath),
-                file: file,
-                folderPath: file.parent ? file.parent.path : ''
-            });
-            processedPaths.add(currentPath);
+            
+            current = current.children.get(pathSoFar)!;
         }
     }
     
-    // Second pass: propagate folder paths to nodes that might not have files
+    // Propagate folder paths to nodes that might not have files
     propagateFolderPaths(root);
     
     return root;
@@ -81,24 +64,17 @@ export function buildDendronStructure(folders: TFolder[], files: TFile[]): Dendr
  * Helper method to propagate folder paths from children to parents
  */
 export function propagateFolderPaths(node: DendronNode) {
-    // If this node already has a folder path, no need to propagate
-    if (node.folderPath) {
-        // Recursively process children
+    // If node doesn't have a folder path, try to get it from children
+    if (!node.realPath) {
         for (const [_, childNode] of node.children) {
-            propagateFolderPaths(childNode);
-        }
-        return;
-    }
-    
-    // Try to get folder path from children
-    for (const [_, childNode] of node.children) {
-        if (childNode.folderPath) {
-            node.folderPath = childNode.folderPath;
-            break;
+            if (childNode.realPath) {
+                node.realPath = childNode.realPath;
+                break;
+            }
         }
     }
     
-    // Recursively process children
+    // Recursively process all children
     for (const [_, childNode] of node.children) {
         propagateFolderPaths(childNode);
     }
