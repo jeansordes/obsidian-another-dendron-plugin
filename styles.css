@@ -124,3 +124,31 @@
         background-color: var(--accent-color);
     }
 }
+
+/* Add styles for the header and collapse all button */
+.dendron-tree-header {
+    display: flex;
+    justify-content: flex-end;
+    padding: 8px;
+    border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.dendron-tree-buttons {
+    display: flex;
+    gap: 8px;
+}
+
+.dendron-tree-button {
+    font-size: 12px;
+    padding: 4px 8px;
+    border-radius: 4px;
+    background-color: var(--interactive-normal);
+    color: var(--text-normal);
+    cursor: pointer;
+    border: none;
+    transition: background-color 0.1s ease-in-out;
+}
+
+.dendron-tree-button:hover {
+    background-color: var(--interactive-hover);
+}

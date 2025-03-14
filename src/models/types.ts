@@ -5,10 +5,12 @@ export const FILE_TREE_VIEW_TYPE = 'dendron-tree-view';
 
 export interface PluginSettings {
     mySetting: string;
+    expandedNodes?: string[]; // Array of node paths that are expanded
 }
 
 export const DEFAULT_SETTINGS: PluginSettings = {
-    mySetting: 'default'
+    mySetting: 'default',
+    expandedNodes: []
 }
 
 export enum DendronNodeType {

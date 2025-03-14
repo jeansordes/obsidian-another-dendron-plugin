@@ -1,11 +1,13 @@
 import { App, Modal, Notice, Plugin, TFile, ViewState, WorkspaceLeaf } from 'obsidian';
 import { FILE_TREE_VIEW_TYPE, PluginSettings, DEFAULT_SETTINGS } from './src/models/types';
 import DendronTreeView from './src/views/DendronTreeView';
+import { t, getCurrentLocale } from './src/i18n';
 
 export default class MyPlugin extends Plugin {
 	settings: PluginSettings;
 	private viewRegistered = false;
 	private isInitializing = false;
+	private dendronView: DendronTreeView | null = null;
 
 	async onload() {
 		await this.loadSettings();
@@ -20,19 +22,22 @@ export default class MyPlugin extends Plugin {
 		// Register the file tree view
 		this.registerView(
 			FILE_TREE_VIEW_TYPE,
-			(leaf) => new DendronTreeView(leaf)
+			(leaf) => {
+				this.dendronView = new DendronTreeView(leaf, this.settings);
+				return this.dendronView;
+			}
 		);
 		this.viewRegistered = true;
 
 		// Add a ribbon icon to open the file tree view
-		this.addRibbonIcon('structured-activity-bar', 'Open Dendron Tree', (evt: MouseEvent) => {
+		this.addRibbonIcon('structured-activity-bar', t('ribbonTooltip'), (evt: MouseEvent) => {
 			this.activateView();
 		});
 
 		// This adds a simple command that can be triggered anywhere
 		this.addCommand({
 			id: 'open-file-tree-view',
-			name: 'Open File Tree View',
+			name: t('commandOpenTree'),
 			callback: () => {
 				this.activateView();
 			}
@@ -41,7 +46,7 @@ export default class MyPlugin extends Plugin {
 		// Add a command to show the current file in the Dendron Tree View
 		this.addCommand({
 			id: 'show-file-in-dendron-tree',
-			name: 'Show File in Dendron Tree View',
+			name: t('commandShowFile'),
 			checkCallback: (checking: boolean) => {
 				// Only enable the command if there's an active file
 				const activeFile = this.app.workspace.getActiveFile();
@@ -52,6 +57,28 @@ export default class MyPlugin extends Plugin {
 				}
 				
 				return true;
+			}
+		});
+
+		// Add a command to collapse all nodes
+		this.addCommand({
+			id: 'collapse-all-dendron-tree',
+			name: t('commandCollapseAll'),
+			callback: () => {
+				if (this.dendronView) {
+					this.dendronView.collapseAllNodes();
+				}
+			}
+		});
+
+		// Add a command to expand all nodes
+		this.addCommand({
+			id: 'expand-all-dendron-tree',
+			name: t('commandExpandAll'),
+			callback: () => {
+				if (this.dendronView) {
+					this.dendronView.expandAllNodes();
+				}
 			}
 		});
 
@@ -188,13 +215,24 @@ export default class MyPlugin extends Plugin {
 
 	async loadSettings() {
 		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+		
+		// Restore expanded nodes if available
+		if (this.dendronView && this.settings.expandedNodes) {
+			this.dendronView.restoreExpandedNodesFromSettings(this.settings.expandedNodes);
+		}
 	}
 
 	async saveSettings() {
+		// Save expanded nodes state if available
+		if (this.dendronView) {
+			this.settings.expandedNodes = this.dendronView.getExpandedNodesForSettings();
+		}
+		
 		await this.saveData(this.settings);
 	}
 
 	onunload() {
-		// Don't detach leaves to keep the view open when the plugin is unloaded
+		// Save settings before unloading
+		this.saveSettings();
 	}
 }
