@@ -1,5 +1,5 @@
 import { App, Modal, Notice, Plugin, TFile, ViewState, WorkspaceLeaf } from 'obsidian';
-import { FILE_TREE_VIEW_TYPE, PluginSettings, DEFAULT_SETTINGS } from './src/models/types';
+import { FILE_TREE_VIEW_TYPE, PluginSettings, DEFAULT_SETTINGS, TREE_VIEW_ICON } from './src/models/types';
 import DendronTreeView from './src/views/DendronTreeView';
 import { t, getCurrentLocale } from './src/i18n';
 
@@ -30,7 +30,7 @@ export default class MyPlugin extends Plugin {
 		this.viewRegistered = true;
 
 		// Add a ribbon icon to open the file tree view
-		this.addRibbonIcon('structured-activity-bar', t('ribbonTooltip'), (evt: MouseEvent) => {
+		this.addRibbonIcon(TREE_VIEW_ICON, t('ribbonTooltip'), (evt: MouseEvent) => {
 			this.activateView();
 		});
 

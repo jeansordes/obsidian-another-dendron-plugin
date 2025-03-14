@@ -1,5 +1,5 @@
 import { App, ItemView, Notice, TFile, WorkspaceLeaf, setIcon } from 'obsidian';
-import { DendronNode, DendronNodeType, FILE_TREE_VIEW_TYPE, PluginSettings } from '../models/types';
+import { DendronNode, DendronNodeType, FILE_TREE_VIEW_TYPE, PluginSettings, TREE_VIEW_ICON } from '../models/types';
 import { buildDendronStructure } from '../utils/treeUtils';
 import { t } from '../i18n';
 
@@ -28,14 +28,17 @@ export default class DendronTreeView extends ItemView {
     }
 
     getIcon(): string {
-        return 'structured-activity-bar';
+        return TREE_VIEW_ICON;
     }
 
     async onOpen() {
         const container = this.containerEl.children[1];
         container.empty();
+        
+        // Set the main container to be a flex container with column direction
+        container.addClass('dendron-view-container');
 
-        // Create a header with controls
+        // Create a fixed header with controls
         const header = document.createElement('div');
         header.className = 'dendron-tree-header';
         container.appendChild(header);
@@ -43,10 +46,15 @@ export default class DendronTreeView extends ItemView {
         // Add control buttons to the header
         this.addCollapseAllButton(header);
 
-        // Create a container for the dendron tree
+        // Create a scrollable container for the dendron tree
+        const scrollContainer = document.createElement('div');
+        scrollContainer.className = 'dendron-tree-scroll-container';
+        container.appendChild(scrollContainer);
+        
+        // Create the actual tree container inside the scroll container
         const treeContainer = document.createElement('div');
         treeContainer.className = 'dendron-tree-container';
-        container.appendChild(treeContainer);
+        scrollContainer.appendChild(treeContainer);
         this.container = treeContainer;
 
         // Register file system events
@@ -67,6 +75,9 @@ export default class DendronTreeView extends ItemView {
                 this.highlightActiveFile();
             }, 100);
         }
+        
+        // Update the toggle button icon based on the initial state
+        this.updateToggleButtonIcon();
     }
 
     /**
@@ -303,6 +314,7 @@ export default class DendronTreeView extends ItemView {
         // Try incremental update if a path is provided and it's not a create/delete operation
         if (changedPath && this.tryIncrementalUpdate(changedPath)) {
             this.highlightActiveFile();
+            this.updateToggleButtonIcon();
             return;
         }
 
@@ -321,6 +333,9 @@ export default class DendronTreeView extends ItemView {
         
         // Highlight active file
         this.highlightActiveFile();
+        
+        // Update toggle button icon
+        this.updateToggleButtonIcon();
     }
 
     async buildDendronTree(container: HTMLElement) {
@@ -642,29 +657,55 @@ export default class DendronTreeView extends ItemView {
         buttonContainer.className = 'dendron-tree-buttons';
         header.appendChild(buttonContainer);
         
-        // Add collapse all button
-        const collapseAllButton = document.createElement('button');
-        collapseAllButton.className = 'dendron-tree-button';
-        collapseAllButton.setAttribute('title', t('tooltipCollapseAll'));
-        collapseAllButton.textContent = t('buttonCollapseAll');
-        buttonContainer.appendChild(collapseAllButton);
+        // Add a single toggle button for expand/collapse all (as a div instead of button)
+        const toggleButton = document.createElement('div');
+        toggleButton.className = 'dendron-tree-toggle-button is-clickable';
+        buttonContainer.appendChild(toggleButton);
         
-        collapseAllButton.addEventListener('click', () => {
-            this.collapseAllNodes();
+        // Create the icon container
+        const iconContainer = document.createElement('div');
+        iconContainer.className = 'dendron-tree-toggle-icon';
+        toggleButton.appendChild(iconContainer);
+        
+        // Add click handler
+        toggleButton.addEventListener('click', () => {
+            // Get the current button action from its title
+            const currentTitle = toggleButton.getAttribute('title');
+            
+            // Perform the action based on what the button currently shows
+            if (currentTitle === t('tooltipExpandAll')) {
+                // Button shows "Expand All", so expand all nodes
+                this.expandAllNodes();
+            } else {
+                // Button shows "Collapse All", so collapse all nodes
+                this.collapseAllNodes();
+            }
+            
+            // Update the icon based on the new state
+            this.updateToggleButtonIcon();
         });
         
-        // Add expand all button
-        const expandAllButton = document.createElement('button');
-        expandAllButton.className = 'dendron-tree-button';
-        expandAllButton.setAttribute('title', t('tooltipExpandAll'));
-        expandAllButton.textContent = t('buttonExpandAll');
-        buttonContainer.appendChild(expandAllButton);
-        
-        expandAllButton.addEventListener('click', () => {
-            this.expandAllNodes();
-        });
+        // Set initial icon and title based on state
+        this.updateToggleButtonIcon();
     }
     
+    /**
+     * Check if any nodes are currently expanded
+     */
+    private hasExpandedNodes(): boolean {
+        return this.expandedNodes.size > 0;
+    }
+    
+    /**
+     * Check if all nodes are collapsed
+     */
+    private areAllNodesCollapsed(): boolean {
+        if (!this.container) return true;
+        
+        // If there are no expanded nodes, all nodes are collapsed
+        return !this.hasExpandedNodes();
+    }
+
     /**
      * Get expanded nodes for saving in settings
      */
@@ -699,6 +740,9 @@ export default class DendronTreeView extends ItemView {
         triangles.forEach(triangle => {
             triangle.removeClass('is-collapsed');
         });
+        
+        // Update the toggle button icon if it exists
+        this.updateToggleButtonIcon();
     }
 
     /**
@@ -726,5 +770,31 @@ export default class DendronTreeView extends ItemView {
         triangles.forEach(triangle => {
             triangle.addClass('is-collapsed');
         });
+        
+        // Update the toggle button icon if it exists
+        this.updateToggleButtonIcon();
+    }
+    
+    /**
+     * Update the toggle button icon based on the current state
+     */
+    private updateToggleButtonIcon(): void {
+        const toggleButton = this.containerEl.querySelector('.dendron-tree-toggle-button') as HTMLElement | null;
+        if (!toggleButton) return;
+        
+        const iconContainer = toggleButton.querySelector('.dendron-tree-toggle-icon') as HTMLElement | null;
+        if (!iconContainer) return;
+        
+        const allNodesCollapsed = this.areAllNodesCollapsed();
+        
+        if (allNodesCollapsed) {
+            // If all nodes are collapsed, show "expand all" icon
+            setIcon(iconContainer, 'chevrons-up-down');
+            toggleButton.setAttribute('title', t('tooltipExpandAll'));
+        } else {
+            // Otherwise, show "collapse all" icon
+            setIcon(iconContainer, 'chevrons-down-up');
+            toggleButton.setAttribute('title', t('tooltipCollapseAll'));
+        }
     }
 } 

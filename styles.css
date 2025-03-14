@@ -1,4 +1,9 @@
-.dendron-tree-container {
+.dendron-view-container {
+    user-select: none;
+    padding: 0 !important;
+}
+
+.dendron-view-container {
     --bg2-5: hsla(0, 0%, calc(96% - 50%), 0.06);
     --bg-clickable: var(--bg2-5);
     --bg-hover: var(--bg3);
@@ -8,13 +13,9 @@
     --border-radius: 3px;
     --accent-color: var(--ax3);
 
-    * {
-        user-select: none;
-    }
-
     .dendron-tree-list {
         list-style: none;
-        padding: 0;
+        padding: 0.3rem 0;
         margin: 0;
     }
 
@@ -125,12 +126,29 @@
     }
 }
 
-/* Add styles for the header and collapse all button */
+/* Main container for the entire view */
+.dendron-view-container {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden;
+}
+
+/* Fixed header at the top */
 .dendron-tree-header {
     display: flex;
-    justify-content: flex-end;
-    padding: 8px;
+    padding: 4px;
     border-bottom: 1px solid var(--background-modifier-border);
+    flex-shrink: 0; /* Prevent header from shrinking */
+    z-index: 10; /* Ensure header stays on top */
+}
+
+/* Scrollable container for the tree */
+.dendron-tree-scroll-container {
+    flex-grow: 1;
+    overflow: auto;
+    padding: 0;
+    margin: 0;
 }
 
 .dendron-tree-buttons {
@@ -138,17 +156,45 @@
     gap: 8px;
 }
 
+/* Style for the toggle expand/collapse button */
+.dendron-tree-toggle-button {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: var(--button-size);
+    height: var(--button-size);
+    border-radius: var(--border-radius);
+    background-color: var(--bg-clickable);
+    color: var(--tx2);
+    cursor: pointer;
+    transition: background-color 0.1s ease-in-out;
+    padding: 0;
+}
+
+.dendron-tree-toggle-button:hover {
+    background-color: var(--bg-hover);
+}
+
+.dendron-tree-toggle-icon {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.dendron-tree-toggle-icon svg {
+    width: var(--button-icon-size);
+    height: var(--button-icon-size);
+}
+
 .dendron-tree-button {
     font-size: 12px;
     padding: 4px 8px;
-    border-radius: 4px;
-    background-color: var(--interactive-normal);
-    color: var(--text-normal);
+    border-radius: var(--border-radius);
+    background-color: var(--bg-clickable);
     cursor: pointer;
     border: none;
-    transition: background-color 0.1s ease-in-out;
 }
 
 .dendron-tree-button:hover {
-    background-color: var(--interactive-hover);
+    background-color: var(--bg-hover);
 }
