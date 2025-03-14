@@ -1,5 +1,15 @@
 .dendron-tree-container {
-    user-select: none;
+    --bg2-5: hsla(0, 0%, calc(96% - 50%), 0.06);
+    --bg-clickable: var(--bg2-5);
+    --bg-hover: var(--bg3);
+    --line-height: 1.5rem;
+    --button-icon-size: 14px;
+    --button-size: calc(var(--line-height));
+    --border-radius: 3px;
+
+    * {
+        user-select: none;
+    }
 
     .dendron-tree-list {
         list-style: none;
@@ -15,22 +25,32 @@
 
     .tree-item-inner {
         flex: 1 1 auto;
-        text-overflow: ellipsis;
-        overflow: hidden;
-        min-width: 0;
-        padding: 1px 6px;
-        border-radius: 3px;
+        padding: 0 6px;
+        margin-left: 2px;
+        margin-bottom: 2px;
+        border-radius: var(--border-radius);
+        line-height: 1.5rem;
+        white-space: nowrap;
     }
 
-    .tree-item-inner.is-clickable:hover {
-        background-color: var(--nav-item-background-hover);
+    .tree-item-inner.is-clickable {
         color: var(--nav-item-color-hover);
+        background-color: var(--bg-clickable);
         cursor: pointer;
     }
 
+    .tree-item-inner.is-clickable:hover {
+        background-color: var(--bg-hover);
+    }
+
+    .tree-item-self {
+        padding-top: 0;
+        padding-bottom: 0;
+    }
+
     .tree-item-folder-icon svg {
-        width: 14px;
-        height: 14px;
+        width: var(--button-icon-size);
+        height: var(--button-icon-size);
         transform: translate(-2px, 3px);
     }
 
@@ -48,30 +68,52 @@
 
     .collapse-icon svg {
         color: var(--nav-collapse-icon-color);
+        transform: translate(-0.5px, 0px);
     }
 
     .collapse-icon:hover svg {
         color: var(--nav-item-color-hover);
     }
 
+    .collapse-icon:before {
+        content: '';
+        display: block;
+        position: absolute;
+        left: -4px;
+        top: -7px;
+        width: var(--button-size);
+        height: var(--button-size);
+        border-radius: var(--border-radius);
+        background-color: var(--bg-clickable);
+    }
+
+    .collapse-icon:hover:before {
+        background-color: var(--bg-hover);
+    }
+
     .is-clickable {
         cursor: pointer;
     }
 
-    .tree-item-create-button {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        width: 20px;
-        height: 20px;
-        border-radius: 3px;
-        margin-left: 4px;
-        opacity: 0.5;
-        transition: opacity 150ms ease;
+    .tree-item-create-button:before {
+        content: '';
+        display: block;
+        position: absolute;
+        right: 8px;
+        top: 0;
+        width: var(--button-size);
+        height: var(--button-size);
+        border-radius: var(--border-radius);
+        background-color: var(--bg-clickable);
     }
 
-    .tree-item-create-button:hover {
-        opacity: 1;
-        background-color: var(--nav-item-background-hover);
+    .tree-item-create-button:hover:before {
+        background-color: var(--bg-hover);
+    }
+
+    .tree-item-create-button svg {
+        width: var(--button-icon-size);
+        height: var(--button-icon-size);
+        transform: translate(-4px, 2px);
     }
 }
