@@ -1,18 +1,28 @@
 import { App, Modal, Notice, Plugin, TFile, ViewState, WorkspaceLeaf } from 'obsidian';
-import { FILE_TREE_VIEW_TYPE, MyPluginSettings, DEFAULT_SETTINGS } from './src/models/types';
+import { FILE_TREE_VIEW_TYPE, PluginSettings, DEFAULT_SETTINGS } from './src/models/types';
 import DendronTreeView from './src/views/DendronTreeView';
 
 export default class MyPlugin extends Plugin {
-	settings: MyPluginSettings;
+	settings: PluginSettings;
+	private viewRegistered = false;
+	private isInitializing = false;
 
 	async onload() {
 		await this.loadSettings();
+
+		// Always unregister the view type first to ensure clean registration
+		try {
+			(this.app as any).viewRegistry.unregisterView(FILE_TREE_VIEW_TYPE);
+		} catch (e) {
+			// This is normal if it's the first load
+		}
 
 		// Register the file tree view
 		this.registerView(
 			FILE_TREE_VIEW_TYPE,
 			(leaf) => new DendronTreeView(leaf)
 		);
+		this.viewRegistered = true;
 
 		// Add a ribbon icon to open the file tree view
 		this.addRibbonIcon('structured-activity-bar', 'Open Dendron Tree', (evt: MouseEvent) => {
@@ -28,126 +38,84 @@ export default class MyPlugin extends Plugin {
 			}
 		});
 
-		// Restore the view state when the layout is ready
-		this.app.workspace.onLayoutReady(() => this.initLeaf());
+		// Use a timeout to ensure we don't initialize too early
+        // and create a new leaf before checking for existing leaves
+        // resulting in a race condition, with 2 leaves created in the end
+		setTimeout(() => {
+			this.app.workspace.onLayoutReady(() => {
+				this.checkAndInitializeView();
+			});
+		}, 100);
+	}
+
+	private async checkAndInitializeView() {
+		// Check for leaves with our view type
+		const leaves = this.app.workspace.getLeavesOfType(FILE_TREE_VIEW_TYPE);
+		
+		// If we already have a leaf with our view type, don't create another one
+		if (leaves.length > 0) {
+			return;
+		}
+		
+		// Check for any leaves that might have our view type but are not properly initialized
+		const allLeaves = this.app.workspace.getLeavesOfType('');
+		
+		// Find any leaves that might be our view but not properly registered
+		const potentialDendronLeaves = allLeaves.filter(leaf => 
+			leaf.view?.containerEl?.querySelector('.dendron-tree-container') !== null
+		);
+		
+		if (potentialDendronLeaves.length > 0) {
+			for (const leaf of potentialDendronLeaves) {
+				await leaf.setViewState({
+					type: FILE_TREE_VIEW_TYPE,
+					active: false
+				} as ViewState);
+			}
+			return;
+		}
+		
+		// If no existing leaves are found, create a new one
+		await this.initLeaf();
 	}
 
 	async initLeaf(): Promise<void> {
-		// If the view is already open, do nothing
-		const leaves = this.app.workspace.getLeavesOfType(FILE_TREE_VIEW_TYPE);
-		if (leaves.length) {
-			return;
-		}
-
-		// Try to get the saved workspace data
-		const savedData = await this.loadData();
+		// Set flag to indicate we're initializing
+		this.isInitializing = true;
 		
-		// Create the leaf in the saved position or default to right
-		let leaf: WorkspaceLeaf | null;
-		if (savedData?.position === 'left') {
-			leaf = this.app.workspace.getLeftLeaf(false);
-		} else {
-			leaf = this.app.workspace.getRightLeaf(false);
+		try {
+			// Always create the view in the left panel
+			const leaf = this.app.workspace.getLeftLeaf(false);
+			if (!leaf) return;
+			
+			// Set the view state
+			await leaf.setViewState({
+				type: FILE_TREE_VIEW_TYPE,
+				active: false // Set to false to avoid automatically focusing the view
+			} as ViewState);
+		} finally {
+			// Reset the flag
+			this.isInitializing = false;
 		}
-
-		if (!leaf) return;
-
-		// Set the view state
-		await leaf.setViewState({
-			type: FILE_TREE_VIEW_TYPE,
-			active: true
-		} as ViewState);
 	}
 
 	async activateView() {
 		// If the view is already open, reveal it
 		const existing = this.app.workspace.getLeavesOfType(FILE_TREE_VIEW_TYPE);
+		
 		if (existing.length > 0) {
 			this.app.workspace.revealLeaf(existing[0]);
-			
-			// Check and update position immediately
-			this.detectAndSavePosition();
 			return;
 		}
 
-		// Try to get the saved position
-		const savedData = await this.loadData();
-		
-		// Create the leaf in the saved position or default to right
-		let leaf: WorkspaceLeaf | null;
-		if (savedData?.position === 'left') {
-			leaf = this.app.workspace.getLeftLeaf(false);
-		} else {
-			leaf = this.app.workspace.getRightLeaf(false);
-		}
-
-		if (!leaf) return;
-
-		// Set the view state
-		await leaf.setViewState({
-			type: FILE_TREE_VIEW_TYPE,
-			active: true
-		} as ViewState);
-
-		// Register a one-time event to detect position after the view is fully created
-		setTimeout(() => {
-			this.detectAndSavePosition();
-			this.setupDragListeners();
-		}, 500);
-
-		// Track position changes
-		this.registerEvent(
-			this.app.workspace.on('layout-change', () => {
-				setTimeout(() => {
-					this.detectAndSavePosition();
-				}, 100);
-			})
-		);
-
-		this.app.workspace.revealLeaf(leaf);
-	}
-
-	// Helper method to detect and save the current position
-	async detectAndSavePosition() {
-		const leaves = this.app.workspace.getLeavesOfType(FILE_TREE_VIEW_TYPE);
-		if (leaves.length === 0) {
-			return;
-		}
-		
-		const leaf = leaves[0];
-		
-		// Get the parent element of the leaf
-		const view = leaf.view as DendronTreeView;
-		if (!view) {
-			return;
-		}
-		
-		const leafEl = view.containerEl;
-		
-		// Check if the leaf is in the left sidebar by examining its DOM position
-		const leftSplit = leafEl.closest('.mod-left-split');
-		
-		const isInLeftSidebar = leftSplit !== null;
-		
-		// Get current settings
-		const currentSettings = await this.loadData();
-		const newPosition = isInLeftSidebar ? 'left' : 'right';
-		
-		// Always save the position to ensure it's updated
-		currentSettings.position = newPosition;
-		await this.saveData(currentSettings);
-		
-		// Update the settings object too
-		this.settings.position = newPosition;
-	}
-
-	onunload() {
-		// Unregister the view when the plugin is disabled
-		this.app.workspace.detachLeavesOfType(FILE_TREE_VIEW_TYPE);
-
-		// Disconnect the MutationObserver if it exists
-		if ((this as any).observer) {
-			(this as any).observer.disconnect();
+		// Otherwise, create a new leaf in the left sidebar
+		const leaf = this.app.workspace.getLeftLeaf(false);
+		if (leaf) {
+			await leaf.setViewState({
+				type: FILE_TREE_VIEW_TYPE,
+				active: true
+			} as ViewState);
+			this.app.workspace.revealLeaf(leaf);
 		}
 	}
 
@@ -159,26 +127,7 @@ export default class MyPlugin extends Plugin {
 		await this.saveData(this.settings);
 	}
 
-	// Set up drag listeners to detect when the view is moved
-	setupDragListeners() {
-		// Find all drag handles in the app
-		const dragHandles = document.querySelectorAll('.workspace-tab-header-tab-list, .workspace-tab-header, .mod-drag-handle');
-		
-		// Add event listeners to all drag handles
-		dragHandles.forEach(handle => {
-			handle.addEventListener('mouseup', () => {
-				setTimeout(() => this.detectAndSavePosition(), 200);
-			});
-		});
-		
-		// Also listen for dragend events on the document
-		document.addEventListener('dragend', () => {
-			setTimeout(() => this.detectAndSavePosition(), 200);
-		});
-		
-		// Listen for the end of a drag operation
-		document.addEventListener('mouseup', () => {
-			setTimeout(() => this.detectAndSavePosition(), 200);
-		});
+	onunload() {
+		// Don't detach leaves to keep the view open when the plugin is unloaded
 	}
 }
