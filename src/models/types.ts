@@ -21,8 +21,9 @@ export enum DendronNodeType {
 }
 
 export interface DendronNode {
-    name: string;
-    realPath: string;
+    dendronPath: string;
+    filePath: string;
+    folderPath: string;
     nodeType: DendronNodeType;
     obsidianResource?: TFile | TFolder;
     children: Map<string, DendronNode>;

@@ -1,4 +1,4 @@
-import { App, TFile, setIcon } from 'obsidian';
+import { App, Notice, TFile, setIcon } from 'obsidian';
 import { DendronNode, DendronNodeType } from '../../models/types';
 import { t } from '../../i18n';
 
@@ -15,9 +15,8 @@ export class DendronNodeRenderer {
      * Render a node in the tree
      */
     renderDendronNode(node: DendronNode, parentEl: HTMLElement, expandedNodes: Set<string>) {
-        // Sort children by name
-        const sortedChildren = Array.from(node.children.entries())
-            .sort(([aKey], [bKey]) => aKey.localeCompare(bKey));
+        // Reverse the order of the children to build the tree in the correct order
+        const sortedChildren = Array.from(node.children.entries()).reverse();
 
         // Use DocumentFragment for batch DOM operations
         const fragment = document.createDocumentFragment();
@@ -47,16 +46,13 @@ export class DendronNodeRenderer {
 
             this.renderToggleButton(contentWrapper, item, hasChildren, expandedNodes);
             
-            // Check if a folder note exists for folders
-            const folderNoteExists = this.checkFolderNoteExists(childNode, name);
-
             // If the node is a folder, add a folder icon
             if (childNode.nodeType === DendronNodeType.FOLDER) {
                 this.renderFolderIcon(contentWrapper);
             }
 
             // Display name without the path
-            this.renderNodeName(contentWrapper, name, childNode, folderNoteExists);
+            this.renderNodeName(contentWrapper, childNode);
 
             // Add a "+" button for virtual nodes
             if (childNode.nodeType === DendronNodeType.VIRTUAL) {
@@ -122,18 +118,6 @@ export class DendronNodeRenderer {
     }
 
     /**
-     * Check if a folder note exists for a folder node
-     */
-    private checkFolderNoteExists(node: DendronNode, name: string): boolean {
-        if (node.children.size > 0) {
-            const folderNotePath = `${node.realPath ? node.realPath + '/' : ''}${name}.md`;
-            const folderNote = this.app.vault.getAbstractFileByPath(folderNotePath);
-            return folderNote instanceof TFile;
-        }
-        return false;
-    }
-
-    /**
      * Render folder icon
      */
     private renderFolderIcon(contentWrapper: HTMLElement): void {
@@ -150,13 +134,11 @@ export class DendronNodeRenderer {
      */
     private renderNodeName(
         contentWrapper: HTMLElement, 
-        name: string, 
-        node: DendronNode, 
-        folderNoteExists: boolean
+        node: DendronNode
     ): void {
-        const displayName = name.split('.').pop() || name;
-        const isClickable = node.obsidianResource || (node.children.size > 0 && folderNoteExists);
-        const isCreateNew = !node.obsidianResource && node.nodeType === DendronNodeType.FILE;
+        const displayName = node.dendronPath.split('.').pop() || node.dendronPath;
+        const isClickable = node.nodeType === DendronNodeType.FILE;
+        const isCreateNew = node.nodeType === DendronNodeType.VIRTUAL;
         
         let className = 'tree-item-inner';
         if (isCreateNew) className += ' mod-create-new';
@@ -168,47 +150,38 @@ export class DendronNodeRenderer {
         
         // Add title attribute to show full path
         if (node.nodeType === DendronNodeType.FILE) {
-            innerDiv.setAttribute('title', node.realPath ? `${node.realPath}/${displayName}.md` : `${displayName}.md`);
+            innerDiv.setAttribute('title', node.folderPath ? `${node.folderPath}/${displayName}.md` : `${displayName}.md`);
         } else if (node.nodeType === DendronNodeType.FOLDER) {
-            innerDiv.setAttribute('title', node.realPath ? `${node.realPath}/${displayName}` : displayName);
+            innerDiv.setAttribute('title', node.folderPath ? `${node.folderPath}/${displayName}` : displayName);
         }
         
         contentWrapper.appendChild(innerDiv);
 
         // Add click handler for existing resources
         if (isClickable) {
-            this.addClickHandler(innerDiv, node, name, folderNoteExists);
+            this.addClickHandler(innerDiv, node);
             
             // Store reference to file item for highlighting
             if (node.nodeType === DendronNodeType.FILE && node.obsidianResource) {
                 const file = node.obsidianResource as TFile;
                 this.fileItemsMap.set(file.path, innerDiv);
-            } else if (node.children.size > 0 && folderNoteExists) {
-                const folderNotePath = `${node.realPath ? node.realPath + '/' : ''}${name}.md`;
+            } else if (node.nodeType === DendronNodeType.FOLDER) {
+                const folderNotePath = `${node.folderPath ? node.folderPath + '/' : ''}${node.filePath}.md`;
                 this.fileItemsMap.set(folderNotePath, innerDiv);
             }
         }
     }
 
     /**
-     * Add click handler to open files or folder notes
+     * Add click handler to open files
      */
     private addClickHandler(
         element: HTMLElement, 
-        node: DendronNode, 
-        name: string, 
-        folderNoteExists: boolean
+        node: DendronNode
     ): void {
         element.addEventListener('click', async () => {
             if (node.nodeType === DendronNodeType.FILE && node.obsidianResource) {
                 await this.openFile(node.obsidianResource as TFile);
-            } else if (node.children.size > 0 && folderNoteExists) {
-                const folderNotePath = `${node.realPath ? node.realPath + '/' : ''}${name}.md`;
-                const folderNote = this.app.vault.getAbstractFileByPath(folderNotePath);
-
-                if (folderNote instanceof TFile) {
-                    await this.openFile(folderNote);
-                }
             }
         });
     }
@@ -231,7 +204,8 @@ export class DendronNodeRenderer {
         createButton.className = 'tree-item-create-button is-clickable';
         
         // Add title attribute to show the path of the new file
-        const notePath = node.realPath ? `${node.realPath}/${name.split('.').pop()}.md` : `${name}.md`;
+        console.log(node);
+        const notePath = node.folderPath ? `${node.folderPath}/${node.filePath}.md` : `${node.filePath}.md`;
         createButton.setAttribute('title', t('tooltipCreateNote', { path: notePath }));
         
         itemSelf.appendChild(createButton);
@@ -248,9 +222,9 @@ export class DendronNodeRenderer {
      * Create and open a new note
      */
     private async createAndOpenNote(node: DendronNode, name: string): Promise<void> {
-        const dendronFolderPath = node.realPath.replace('/', '.');
+        const dendronFolderPath = node.folderPath.replace('/', '.');
         const baseName = name.replace(dendronFolderPath + '.', '');
-        const notePath = node.realPath + '/' + baseName + '.md';
+        const notePath = node.folderPath + '/' + baseName + '.md';
         let note = this.app.vault.getAbstractFileByPath(notePath);
 
         if (!note) {

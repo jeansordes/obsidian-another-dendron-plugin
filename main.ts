@@ -1,7 +1,7 @@
 import { App, Modal, Notice, Plugin, TFile, ViewState, WorkspaceLeaf } from 'obsidian';
 import { FILE_TREE_VIEW_TYPE, PluginSettings, DEFAULT_SETTINGS, TREE_VIEW_ICON } from './src/models/types';
 import DendronTreeView from './src/views/DendronTreeView';
-import { t, getCurrentLocale } from './src/i18n';
+import { t } from './src/i18n';
 
 export default class MyPlugin extends Plugin {
 	settings: PluginSettings;
