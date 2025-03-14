@@ -130,82 +130,85 @@
     }
 
     /* Style for the currently active file */
-    .tree-item-inner.is-active, .tree-item-inner.is-active:hover {
+    .tree-item-inner.is-active,
+    .tree-item-inner.is-active:hover {
         color: var(--text-on-accent);
         background-color: var(--accent-color);
     }
-}
 
-/* Main container for the entire view */
-.dendron-view-container {
-    display: flex;
-    flex-direction: column;
-    height: 100%;
-    overflow: hidden;
-}
+    /* Main container for the entire view */
+    .dendron-view-container {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+        overflow: hidden;
+    }
 
-/* Fixed header at the top */
-.dendron-tree-header {
-    display: flex;
-    padding: 4px;
-    border-bottom: 1px solid var(--background-modifier-border);
-    flex-shrink: 0; /* Prevent header from shrinking */
-    z-index: 10; /* Ensure header stays on top */
-}
+    /* Fixed header at the top */
+    .dendron-tree-header {
+        display: flex;
+        padding: 4px;
+        border-bottom: 1px solid var(--background-modifier-border);
+        flex-shrink: 0;
+        /* Prevent header from shrinking */
+        z-index: 10;
+        /* Ensure header stays on top */
+    }
 
-/* Scrollable container for the tree */
-.dendron-tree-scroll-container {
-    flex-grow: 1;
-    overflow: auto;
-    padding: 0;
-    margin: 0;
-}
+    /* Scrollable container for the tree */
+    .dendron-tree-scroll-container {
+        flex-grow: 1;
+        overflow: auto;
+        padding: 0;
+        margin: 0;
+    }
 
-.dendron-tree-buttons {
-    display: flex;
-    gap: 8px;
-}
+    .dendron-tree-buttons {
+        display: flex;
+        gap: 8px;
+    }
 
-/* Style for the toggle expand/collapse button */
-.dendron-tree-toggle-button {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    width: var(--button-size);
-    height: var(--button-size);
-    border-radius: var(--border-radius);
-    background-color: var(--bg-clickable);
-    color: var(--color-text-clickable);
-    cursor: pointer;
-    transition: background-color 0.1s ease-in-out;
-    padding: 0;
-}
+    /* Style for the toggle expand/collapse button */
+    .dendron-tree-toggle-button {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        width: var(--button-size);
+        height: var(--button-size);
+        border-radius: var(--border-radius);
+        background-color: var(--bg-clickable);
+        color: var(--color-text-clickable);
+        cursor: pointer;
+        transition: background-color 0.1s ease-in-out;
+        padding: 0;
+    }
 
-.dendron-tree-toggle-button:hover {
-    background-color: var(--bg-hover);
-    color: var(--color-text-hover);
-}
+    .dendron-tree-toggle-button:hover {
+        background-color: var(--bg-hover);
+        color: var(--color-text-hover);
+    }
 
-.dendron-tree-toggle-icon {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-}
+    .dendron-tree-toggle-icon {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+    }
 
-.dendron-tree-toggle-icon svg {
-    width: var(--button-icon-size);
-    height: var(--button-icon-size);
-}
+    .dendron-tree-toggle-icon svg {
+        width: var(--button-icon-size);
+        height: var(--button-icon-size);
+    }
 
-.dendron-tree-button {
-    font-size: 12px;
-    padding: 4px 8px;
-    border-radius: var(--border-radius);
-    background-color: var(--bg-clickable);
-    cursor: pointer;
-    border: none;
-}
+    .dendron-tree-button {
+        font-size: 12px;
+        padding: 4px 8px;
+        border-radius: var(--border-radius);
+        background-color: var(--bg-clickable);
+        cursor: pointer;
+        border: none;
+    }
 
-.dendron-tree-button:hover {
-    background-color: var(--bg-hover);
+    .dendron-tree-button:hover {
+        background-color: var(--bg-hover);
+    }
 }
