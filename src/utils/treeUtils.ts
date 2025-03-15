@@ -19,7 +19,6 @@ export function createDendronNode(options: Partial<DendronNode> = {}): DendronNo
  * Builds a Dendron structure from a list of files and folders
  */
 export function buildDendronStructure(folders: TFolder[], files: TFile[]): DendronNode {
-    console.log("Building Dendron structure");
     const root = createDendronNode();
     const processedPaths = new Set<string>();
 
@@ -60,7 +59,17 @@ export function buildDendronStructure(folders: TFolder[], files: TFile[]): Dendr
                 let filePath = '';
                 const dendronFolderPath = folderPath.replace('/', '.');
                 const baseName = pathSoFar.replace(dendronFolderPath + '.', '');
-                filePath = folderPath + '/' + baseName + '.md';
+                
+                if (nodeType === DendronNodeType.FOLDER) {
+                    // For folders, the filePath should be the folder path itself
+                    const folderPathFromDendron = pathSoFar.replace(/\./g, '/');
+                    filePath = folderPathFromDendron;
+                    // Update folderPath to match the actual folder path
+                    folderPath = folderPathFromDendron;
+                } else {
+                    // For files, append .md as before
+                    filePath = folderPath + '/' + baseName + '.md';
+                }
                 
                 // Handle root folder
                 if (filePath.startsWith('//')) {
@@ -75,13 +84,15 @@ export function buildDendronStructure(folders: TFolder[], files: TFile[]): Dendr
                 }
 
                 // Create the node with appropriate properties
-                current.children.set(pathSoFar, createDendronNode({
+                const node = createDendronNode({
                     dendronPath: pathSoFar,
                     nodeType: nodeType,
                     filePath: filePath,
                     folderPath: folderPath,
                     obsidianResource: resource
-                }));
+                });
+
+                current.children.set(pathSoFar, node);
                 
                 processedPaths.add(pathSoFar);
             }

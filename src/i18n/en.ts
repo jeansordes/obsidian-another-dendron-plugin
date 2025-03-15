@@ -16,6 +16,7 @@ export default {
     tooltipExpandAll: 'Expand all folders',
     tooltipFolder: 'Folder',
     tooltipCreateNote: 'Create note: {{path}}',
+    tooltipCreateChildNote: 'Create child note: {{path}}',
     
     // Notices
     noticeCreatedNote: 'Created note: {{path}}',

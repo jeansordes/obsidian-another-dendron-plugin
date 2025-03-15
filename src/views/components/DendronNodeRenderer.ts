@@ -56,10 +56,8 @@ export class DendronNodeRenderer {
             // Display name without the path
             this.renderNodeName(contentWrapper, childNode);
 
-            // Add a "+" button for virtual nodes
-            if (childNode.nodeType === DendronNodeType.VIRTUAL) {
-                this.renderCreateButton(itemSelf, childNode, name);
-            }
+            // Add buttons for all nodes
+            this.renderButtons(itemSelf, childNode, name);
 
             // Render children if any
             if (hasChildren) {
@@ -199,23 +197,65 @@ export class DendronNodeRenderer {
     }
 
     /**
-     * Render create button for virtual nodes
+     * Render buttons for all nodes
      */
-    private renderCreateButton(itemSelf: HTMLElement, node: DendronNode, name: string): void {
-        const createButton = document.createElement('div');
-        createButton.className = 'tree-item-create-button is-clickable';
+    private renderButtons(itemSelf: HTMLElement, node: DendronNode, name: string): void {
+        // Create a container for the buttons
+        const buttonContainer = document.createElement('div');
+        buttonContainer.className = 'tree-item-buttons-container';
+        itemSelf.appendChild(buttonContainer);
 
-        // Add title attribute to show the path of the new file
-        createButton.setAttribute('title', t('tooltipCreateNote', { path: node.filePath }));
+        // Add the regular "create note" button only for virtual nodes
+        if (node.nodeType === DendronNodeType.VIRTUAL) {
+            const createButton = document.createElement('div');
+            createButton.className = 'tree-item-button is-clickable';
 
-        itemSelf.appendChild(createButton);
-        setIcon(createButton, 'square-pen');
+            // Add title attribute to show the path of the new file
+            createButton.setAttribute('title', t('tooltipCreateNote', { path: node.filePath }));
 
-        // Handle create button click
-        createButton.addEventListener('click', async (event) => {
+            buttonContainer.appendChild(createButton);
+            setIcon(createButton, 'square-pen');
+
+            // Handle create button click
+            createButton.addEventListener('click', async (event) => {
+                event.stopPropagation();
+                await this.createAndOpenNote(node, name);
+            });
+        }
+
+        // Add the "create child note" button for all nodes
+        const createChildButton = document.createElement('div');
+        createChildButton.className = 'tree-item-button rotate-180deg is-clickable';
+
+        // Add title attribute to show the path of the new child file
+        const childPath = this.getChildNotePath(node);
+        createChildButton.setAttribute('title', t('tooltipCreateChildNote', { path: childPath }));
+
+        buttonContainer.appendChild(createChildButton);
+        setIcon(createChildButton, 'rotate-cw-square');
+
+        // Handle create child button click
+        createChildButton.addEventListener('click', async (event) => {
             event.stopPropagation();
-            await this.createAndOpenNote(node, name);
+            await this.createAndOpenChildNote(node, name);
         });
+    }
+
+    /**
+     * Get the path for a child note
+     */
+    private getChildNotePath(node: DendronNode): string {
+        let basePath = '';
+
+        if (node.nodeType === DendronNodeType.FILE || node.nodeType === DendronNodeType.VIRTUAL) {
+            // For files, use the file path without the .md extension
+            basePath = node.filePath.replace(/\.md$/, '.new.md');
+        } else if (node.nodeType === DendronNodeType.FOLDER) {
+            // For folders, use the folder path + file path
+            basePath = node.folderPath + '/' + 'new.md';
+        }
+
+        return basePath;
     }
 
     /**
@@ -230,6 +270,30 @@ export class DendronNodeRenderer {
                 new Notice(t('noticeCreatedNote', { path: node.filePath }));
             } catch (error) {
                 new Notice(t('noticeFailedCreateNote', { path: node.filePath }));
+                return;
+            }
+        }
+
+        if (note instanceof TFile) {
+            await this.openFile(note);
+        }
+    }
+
+    /**
+     * Create and open a new child note with ".new" suffix
+     */
+    private async createAndOpenChildNote(node: DendronNode, name: string): Promise<void> {
+        // Create the child path by adding ".new.md"
+        const childPath = this.getChildNotePath(node);
+
+        let note = this.app.vault.getAbstractFileByPath(childPath);
+
+        if (!note) {
+            try {
+                note = await this.app.vault.create(childPath, '');
+                new Notice(t('noticeCreatedNote', { path: childPath }));
+            } catch (error) {
+                new Notice(t('noticeFailedCreateNote', { path: childPath }));
                 return;
             }
         }

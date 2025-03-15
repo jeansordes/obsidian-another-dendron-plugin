@@ -22,6 +22,9 @@
     }
 
     .tree-item-content {
+        max-width: -webkit-fill-available;
+        width: calc(-0px); /* trick to auto adjust the width */
+        height: var(--line-height);
         display: flex;
         align-items: center;
         flex: 1;
@@ -31,7 +34,6 @@
         flex: 1 1 auto;
         padding: 0 6px;
         margin-left: 2px;
-        margin-bottom: 2px;
         border-radius: var(--border-radius);
         line-height: 1.5rem;
         white-space: nowrap;
@@ -48,6 +50,10 @@
     }
 
     .tree-item-self {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        margin-bottom: 4px;
         padding-top: 0;
         padding-bottom: 0;
     }
@@ -99,34 +105,37 @@
         cursor: pointer;
     }
 
-    .tree-item-create-button {
+    /* Container for the create buttons */
+    .tree-item-buttons-container {
+        display: flex;
+        flex-direction: row;
+        gap: 4px;
+    }
+    
+    /* Styles for the create child note button */
+    .tree-item-button {
         color: var(--color-text-clickable);
-    }
-
-    .tree-item-create-button:hover {
-        color: var(--color-text-hover);
-    }
-
-    .tree-item-create-button:before {
-        content: '';
-        display: block;
-        position: absolute;
-        right: 8px;
-        top: 0;
-        width: var(--button-size);
-        height: var(--button-size);
         border-radius: var(--border-radius);
         background-color: var(--bg-clickable);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: var(--button-size);
+        height: var(--button-size);
     }
 
-    .tree-item-create-button:hover:before {
+    .tree-item-button:hover {
+        color: var(--color-text-hover);
         background-color: var(--bg-hover);
     }
 
-    .tree-item-create-button svg {
+    .tree-item-button svg {
         width: var(--button-icon-size);
         height: var(--button-icon-size);
-        transform: translate(-4px, 3px);
+    }
+    
+    .rotate-180deg {
+        transform: rotate(180deg);
     }
 
     /* Style for the currently active file */
@@ -147,7 +156,7 @@
     /* Fixed header at the top */
     .dendron-tree-header {
         display: flex;
-        padding: 4px;
+        padding: 4px 8px;
         border-bottom: 1px solid var(--background-modifier-border);
         flex-shrink: 0;
         position: sticky;

@@ -16,6 +16,7 @@ export default {
     tooltipExpandAll: 'Développer tous les dossiers',
     tooltipFolder: 'Dossier',
     tooltipCreateNote: 'Créer une note : {{path}}',
+    tooltipCreateChildNote: 'Créer une note enfant : {{path}}',
     
     // Notices
     noticeCreatedNote: 'Note créée : {{path}}',
