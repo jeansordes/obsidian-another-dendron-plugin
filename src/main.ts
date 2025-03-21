@@ -1,326 +1,237 @@
-import { App, Modal, Notice, Plugin, TFile, ViewState, WorkspaceLeaf } from 'obsidian';
-import { FILE_TREE_VIEW_TYPE, PluginSettings, DEFAULT_SETTINGS, TREE_VIEW_ICON } from './types';
-import DendronTreeView from './views/DendronTreeView';
+import { Plugin, ViewState, WorkspaceLeaf } from 'obsidian';
 import { t } from './i18n';
+import { TreeState } from './store/TreeState';
+import { DEFAULT_SETTINGS, FILE_TREE_VIEW_TYPE, PluginSettings, TREE_VIEW_ICON } from './types';
+import { Csl } from './utils/ConsoleUtils';
+import { FileUtils } from './utils/FileUtils';
+import { ViewUtils } from './utils/ViewUtils';
+import PluginMainPanel from './views/PluginMainPanel';
 
 export default class TreeMapperPlugin extends Plugin {
-	settings: PluginSettings;
-	private viewRegistered = false;
-	private isInitializing = false;
-	private dendronView: DendronTreeView | null = null;
+    private viewRegistered = false;
+    private isInitializing = false;
+    private dendronView: PluginMainPanel | null = null;
+    private fileUtils: FileUtils;
+    private settings!: PluginSettings;
+    private viewUtils!: ViewUtils;
+    private treeStateUtils: TreeState;
 
-	async onload() {
-		await this.loadSettings();
+    constructor(app: any, manifest: any) {
+        super(app, manifest);
+        this.fileUtils = new FileUtils(this.app);
+        this.treeStateUtils = TreeState.getInstance(this.app);
+    }
 
-		// Always unregister the view type first to ensure clean registration
-		try {
-			this.app.workspace.detachLeavesOfType(FILE_TREE_VIEW_TYPE);
-		} catch (e) {
-			// This is normal if it's the first load
-		}
+    async onload() {
+        Csl.clear();
 
-		// Register the file tree view
-		this.registerView(
-			FILE_TREE_VIEW_TYPE,
-			(leaf) => {
-				this.dendronView = new DendronTreeView(leaf, this.settings);
-				return this.dendronView;
-			}
-		);
-		this.viewRegistered = true;
+        // Reset the stylesheet of the plugin
+        const tmStyles = document.getElementById('tm_styles');
+        if (tmStyles) document.head.removeChild(tmStyles);
+        document.head.appendChild(
+            createEl('link', {
+                href: this.manifest.dir + '/styles.css',
+                type: 'text/css',
+                attr: { id: 'tm_styles' }
+            })
+        );
 
-		// Add a ribbon icon to open the file tree view
-		this.addRibbonIcon(TREE_VIEW_ICON, t('ribbonTooltip'), (evt: MouseEvent) => {
-			this.activateView();
-		});
+        await this.loadSettings();
+        // Ensure expandedNodes is an iterable object before creating a Set
+        const expandedNodes = this.settings.expandedNodes || [];
+        
+        // Set up callback to save settings when tree state changes
+        this.treeStateUtils.setOnStateChangeCallback(() => {
+            this.saveSettings();
+        });
+        
+        this.viewUtils = new ViewUtils(this.app, this.treeStateUtils);
+        await this._registerView();
 
-		// This adds a simple command that can be triggered anywhere
-		this.addCommand({
-			id: 'open-file-tree-view',
-			name: t('commandOpenTree'),
-			callback: () => {
-				this.activateView();
-			}
-		});
+        // Add a ribbon icon to open the file tree view
+        this.addRibbonIcon(TREE_VIEW_ICON, t('ribbonTooltip'), (evt: MouseEvent) => {
+            this.activateView();
+        });
 
-		// Add a command to show the current file in the Dendron Tree View
-		this.addCommand({
-			id: 'show-file-in-dendron-tree',
-			name: t('commandShowFile'),
-			checkCallback: (checking: boolean) => {
-				// Only enable the command if there's an active file
-				const activeFile = this.app.workspace.getActiveFile();
-				if (!activeFile) return false;
-				
-				if (!checking) {
-					this.showFileInDendronTree(activeFile);
-				}
-				
-				return true;
-			}
-		});
+        await this.registerCommands();
 
-		// Add a command to collapse all nodes
-		this.addCommand({
-			id: 'collapse-all-dendron-tree',
-			name: t('commandCollapseAll'),
-			callback: () => {
-				if (this.dendronView) {
-					this.dendronView.collapseAllNodes();
-				}
-			}
-		});
+        // Use Obsidian's workspace.onLayoutReady for proper initialization
+        this.app.workspace.onLayoutReady(() => {
+            this.activateView();
+        });
+    }
 
-		// Add a command to expand all nodes
-		this.addCommand({
-			id: 'expand-all-dendron-tree',
-			name: t('commandExpandAll'),
-			callback: () => {
-				if (this.dendronView) {
-					this.dendronView.expandAllNodes();
-				}
-			}
-		});
+    async _registerView(): Promise<void> {
+        // Always unregister the view type first to ensure clean registration
+        try {
+            this.app.workspace.detachLeavesOfType(FILE_TREE_VIEW_TYPE);
+        } catch (e) {
+            // This is normal if it's the first load
+        }
 
-		// Add a command to create a child note to the current note
-		this.addCommand({
-			id: 'create-child-note',
-			name: t('commandCreateChildNote'),
-			checkCallback: (checking: boolean) => {
-				// Only enable the command if there's an active file
-				const activeFile = this.app.workspace.getActiveFile();
-				if (!activeFile) return false;
-				
-				if (!checking) {
-					this.createChildNote(activeFile);
-				}
-				
-				return true;
-			}
-		});
+        // Register the file tree view
+        this.registerView(
+            FILE_TREE_VIEW_TYPE,
+            (leaf) => {
+                this.dendronView = new PluginMainPanel(leaf, this.settings);
+                return this.dendronView;
+            }
+        );
+        this.viewRegistered = true;
+    }
 
-		// Use a timeout to ensure we don't initialize too early
-        // and create a new leaf before checking for existing leaves
-        // resulting in a race condition, with 2 leaves created in the end
-		setTimeout(() => {
-			this.app.workspace.onLayoutReady(() => {
-				this.checkAndInitializeView();
-			});
-		}, 500);
-	}
+    async registerCommands(): Promise<void> {
+        // This adds a simple command that can be triggered anywhere
+        this.addCommand({
+            id: 'open-file-tree-view',
+            name: t('commandOpenTree'),
+            callback: () => {
+                this.activateView();
+            }
+        });
 
-	private async checkAndInitializeView() {
-		// Check for leaves with our view type
-		const leaves = this.app.workspace.getLeavesOfType(FILE_TREE_VIEW_TYPE);
-		
-		// If we already have a leaf with our view type, don't create another one
-		if (leaves.length > 0) {
-			// Highlight the active file in the existing view
-			this.highlightActiveFileInView(leaves[0]);
-			return;
-		}
-		
-		// Check for any leaves that might have our view type but are not properly initialized
-		const allLeaves = this.app.workspace.getLeavesOfType('');
-		
-		// Find any leaves that might be our view but not properly registered
-		const potentialDendronLeaves = allLeaves.filter(leaf => 
-			leaf.view?.containerEl?.querySelector('.dendron-tree-container') !== null
-		);
-		
-		if (potentialDendronLeaves.length > 0) {
-			for (const leaf of potentialDendronLeaves) {
-				await leaf.setViewState({
-					type: FILE_TREE_VIEW_TYPE,
-					active: false
-				} as ViewState);
-			}
-			// Highlight the active file after reregistering the view
-			if (potentialDendronLeaves.length > 0) {
-				this.highlightActiveFileInView(potentialDendronLeaves[0]);
-			}
-			return;
-		}
-		
-		// If no existing leaves are found, create a new one
-		const newLeaf = await this.initLeaf();
-		if (newLeaf) {
-			this.highlightActiveFileInView(newLeaf);
-		}
-	}
+        // Add a command to show the current file in the Dendron Tree View
+        this.addCommand({
+            id: 'show-file-in-dendron-tree',
+            name: t('commandShowFile'),
+            checkCallback: (checking: boolean) => {
+                // Only enable the command if there's an active file
+                const activeFile = this.app.workspace.getActiveFile();
+                if (!activeFile) return false;
 
-	async initLeaf(): Promise<WorkspaceLeaf | null> {
-		// Set flag to indicate we're initializing
-		this.isInitializing = true;
-		
-		try {
-			// Always create the view in the left panel
-			const leaf = this.app.workspace.getLeftLeaf(false);
-			if (!leaf) return null;
-			
-			// Set the view state
-			await leaf.setViewState({
-				type: FILE_TREE_VIEW_TYPE,
-				active: false // Set to false to avoid automatically focusing the view
-			} as ViewState);
-			
-			return leaf;
-		} finally {
-			// Reset the flag
-			this.isInitializing = false;
-		}
-	}
+                if (!checking) {
+                    // First, make sure the view is open
+                    (async () => {
+                        await this.activateView();
+                        this.viewUtils.highlightFile(activeFile);
+                    })();
+                }
 
-	async activateView() {
-		// If the view is already open, reveal it
-		const existing = this.app.workspace.getLeavesOfType(FILE_TREE_VIEW_TYPE);
-		
-		if (existing.length > 0) {
-			this.app.workspace.revealLeaf(existing[0]);
-			return;
-		}
+                return true;
+            }
+        });
 
-		// Otherwise, create a new leaf in the left sidebar
-		const leaf = this.app.workspace.getLeftLeaf(false);
-		if (leaf) {
-			await leaf.setViewState({
-				type: FILE_TREE_VIEW_TYPE,
-				active: true
-			} as ViewState);
-			this.app.workspace.revealLeaf(leaf);
-		}
-	}
+        // Add a command to collapse all nodes
+        this.addCommand({
+            id: 'collapse-all-dendron-tree',
+            name: t('commandCollapseAll'),
+            callback: () => {
+                if (this.dendronView) {
+                    this.viewUtils.collapseAllNodes();
+                }
+            }
+        });
 
-	/**
-	 * Show the current file in the Dendron Tree View
-	 */
-	private async showFileInDendronTree(file: TFile): Promise<void> {
-		// First, make sure the view is open
-		await this.activateView();
-		
-		// Get the Dendron Tree View instance
-		const leaves = this.app.workspace.getLeavesOfType(FILE_TREE_VIEW_TYPE);
-		if (leaves.length === 0) return;
-		
-		const dendronView = leaves[0].view as DendronTreeView;
-		
-		// Trigger file highlighting
-		if (dendronView && typeof dendronView.highlightFile === 'function') {
-			dendronView.highlightFile(file);
-		}
-	}
+        // Add a command to expand all nodes
+        this.addCommand({
+            id: 'expand-all-dendron-tree',
+            name: t('commandExpandAll'),
+            callback: () => {
+                if (this.dendronView) {
+                    this.viewUtils.expandAllNodes();
+                }
+            }
+        });
 
-	/**
-	 * Highlight the active file in the specified view
-	 */
-	private highlightActiveFileInView(leaf: WorkspaceLeaf): void {
-		// Get the active file
-		const activeFile = this.app.workspace.getActiveFile();
-		if (!activeFile) return;
-		
-		// Get the Dendron Tree View instance
-		const dendronView = leaf.view as DendronTreeView;
-		
-		// Trigger file highlighting
-		if (dendronView && typeof dendronView.highlightFile === 'function') {
-			// Use a small timeout to ensure the view is fully rendered
-			setTimeout(() => {
-				dendronView.highlightFile(activeFile);
-			}, 100);
-		}
-	}
+        // Add a command to create a child note to the current note
+        this.addCommand({
+            id: 'create-child-note',
+            name: t('commandCreateChildNote'),
+            checkCallback: (checking: boolean) => {
+                // Only enable the command if there's an active file
+                const activeFile = this.app.workspace.getActiveFile();
+                if (!activeFile) return false;
 
-	/**
-	 * Create a child note to the current file
-	 */
-	private async createChildNote(file: TFile): Promise<void> {
-		// Generate child note path by replacing .md with .new.md
-		const childPath = file.path.replace(/\.md$/, '.' + t('untitledPath') + '.md');
-		
-		let note = this.app.vault.getAbstractFileByPath(childPath);
+                if (!checking) {
+                    this.fileUtils.createChildNote(activeFile.path);
+                }
 
-		if (!note) {
-			try {
-				note = await this.app.vault.create(childPath, '');
-				new Notice(t('noticeCreatedNote', { path: childPath }));
-			} catch (error) {
-				new Notice(t('noticeFailedCreateNote', { path: childPath }));
-				return;
-			}
-		}
+                return true;
+            }
+        });
+    }
 
-		if (note instanceof TFile) {
-			// Open the file in a new leaf
-			const leaf = this.app.workspace.getLeaf(false);
-			if (leaf) {
-				await leaf.openFile(note, { active: true });
-				
-				// Focus on the editor
-				this.app.workspace.setActiveLeaf(leaf, { focus: true });
-				
-				// Wait for the UI to fully render
-				setTimeout(() => {
-					// Method 1: Try to find the title element in the active leaf's view
-					const containerEl = leaf.view?.containerEl;
-					if (containerEl) {
-						// First try with more specific selectors for Obsidian file title
-						let titleElement = containerEl.querySelector('.view-header-title-container .view-header-title') as HTMLElement;
-						
-						// Fallback to less specific selectors
-						if (!titleElement) {
-							titleElement = containerEl.querySelector('.view-header-title') as HTMLElement;
-						}
-						
-						if (titleElement) {
-							// First focus the element
-							titleElement.focus();
-							
-							// Try double click to enter edit mode (this is how Obsidian's UI works)
-							titleElement.dispatchEvent(new MouseEvent('dblclick', {
-								view: window,
-								bubbles: true,
-								cancelable: true
-							}));
-							
-							// Fallback - if double-clicking doesn't work, try to select the text
-							// which might trigger Obsidian's rename behavior
-							const selection = window.getSelection();
-							const range = document.createRange();
-							range.selectNodeContents(titleElement);
-							selection?.removeAllRanges();
-							selection?.addRange(range);
-							
-							return;
-						}
-					}
-					
-					// Fallback method - show notice
-					new Notice(t('noticeRenameNote'));
-				}, 400);
-			}
-		}
-	}
+    async initLeaf(): Promise<WorkspaceLeaf | null> {
+        // Set flag to indicate we're initializing
+        this.isInitializing = true;
 
-	async loadSettings() {
-		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
-		
-		// Restore expanded nodes if available
-		if (this.dendronView && this.settings.expandedNodes) {
-			this.dendronView.restoreExpandedNodesFromSettings(this.settings.expandedNodes);
-		}
-	}
+        try {
+            // Always create the view in the left panel
+            const leaf = this.app.workspace.getLeftLeaf(false);
+            if (!leaf) return null;
 
-	async saveSettings() {
-		// Save expanded nodes state if available
-		if (this.dendronView) {
-			this.settings.expandedNodes = this.dendronView.getExpandedNodesForSettings();
-		}
-		
-		await this.saveData(this.settings);
-	}
+            // Set the view state
+            await leaf.setViewState({
+                type: FILE_TREE_VIEW_TYPE,
+                active: false // Set to false to avoid automatically focusing the view
+            } as ViewState);
 
-	onunload() {
-		// Save settings before unloading
-		this.saveSettings();
-	}
+            return leaf;
+        } finally {
+            // Reset the flag
+            this.isInitializing = false;
+        }
+    }
+
+    async activateView() {
+        // If the view is already open, reveal it
+        const existing = this.app.workspace.getLeavesOfType(FILE_TREE_VIEW_TYPE);
+
+        if (existing.length > 0) {
+            this.app.workspace.revealLeaf(existing[0]);
+            return;
+        }
+
+        // Otherwise, create a new leaf in the left sidebar
+        const leaf = this.app.workspace.getLeftLeaf(false);
+        if (leaf) {
+            await leaf.setViewState({
+                type: FILE_TREE_VIEW_TYPE,
+                active: true
+            } as ViewState);
+            this.app.workspace.revealLeaf(leaf);
+        }
+    }
+
+    async loadSettings() {
+        this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+
+        // Convert expandedNodes to a Set if it exists
+        if (this.settings.expandedNodes) {
+            // If it's not already a Set, convert it
+            if (!(this.settings.expandedNodes instanceof Set)) {
+                try {
+                    this.settings.expandedNodes = new Set(Array.from(this.settings.expandedNodes || []));
+                } catch (e) {
+                    // If conversion fails, reset to empty Set
+                    console.warn('Failed to convert expandedNodes to Set, resetting to empty Set');
+                    this.settings.expandedNodes = new Set();
+                }
+            }
+            
+            // Restore expanded nodes if available
+            if (this.treeStateUtils) {
+                this.treeStateUtils.restoreExpandedNodesFromSettings(this.settings.expandedNodes);
+            }
+        } else {
+            // Initialize with empty Set if undefined
+            this.settings.expandedNodes = new Set();
+        }
+    }
+
+    async saveSettings() {
+        // Save expanded nodes state if available
+        if (this.treeStateUtils) {
+            const expandedNodesSet = this.treeStateUtils.getExpandedNodesForSettings();
+            // Convert Set to Array for JSON serialization
+            this.settings.expandedNodes = Array.from(expandedNodesSet);
+        }
+
+        await this.saveData(this.settings);
+    }
+
+    onunload() {
+        // Save settings before unloading
+        this.saveSettings();
+    }
 }

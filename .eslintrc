@@ -18,6 +18,15 @@
       "@typescript-eslint/no-unused-vars": ["error", { "args": "none" }],
       "@typescript-eslint/ban-ts-comment": "off",
       "no-prototype-builtins": "off",
-      "@typescript-eslint/no-empty-function": "off"
+      "@typescript-eslint/no-empty-function": "off",
+      "@typescript-eslint/no-explicit-any": "error",
+      "@typescript-eslint/consistent-type-assertions": [
+        "warn",
+        {
+          "assertionStyle": "as",
+          "objectLiteralTypeAssertions": "never"
+        }
+      ],
+      "@typescript-eslint/no-unnecessary-type-assertion": "error"
     } 
   }

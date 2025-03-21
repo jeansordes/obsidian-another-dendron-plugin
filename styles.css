@@ -1,9 +1,13 @@
-.dendron-view-container {
+.tm_view-container {
     user-select: none;
     padding: 0 !important;
-}
+    color: var(--color-text-clickable);
+    font-size: var(--nav-item-size);
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden;
 
-.dendron-view-container {
     --bg2-5: hsla(0, 0%, calc(96% - 50%), 0.06);
     --bg-clickable: var(--bg2-5);
     --bg-hover: var(--bg3);
@@ -15,41 +19,42 @@
     --color-text-clickable: var(--tx2);
     --color-text-hover: var(--tx1);
 
-    .dendron-tree-list {
-        list-style: none;
-        padding: 0.3rem 0;
-        margin: 0;
+    .tm_root {
+        margin: 8px;
+        height: auto;
+        box-sizing: border-box;
     }
 
-    .tree-item-content {
+    .tm_tree-item-content {
         max-width: -webkit-fill-available;
         width: calc(-0px); /* trick to auto adjust the width */
-        height: var(--line-height);
+        min-height: var(--line-height);
         display: flex;
         align-items: center;
         flex: 1;
     }
 
-    .tree-item-inner {
+    .tm_tree-item-inner {
         flex: 1 1 auto;
         padding: 0 6px;
         margin-left: 2px;
         border-radius: var(--border-radius);
         line-height: 1.5rem;
         white-space: nowrap;
+        text-overflow: ellipsis;
+        overflow: hidden;
     }
 
-    .tree-item-inner.is-clickable {
+    .tm_tree-item-inner.is-clickable {
         color: var(--color-text-hover);
         background-color: var(--bg-clickable);
-        cursor: pointer;
     }
 
-    .tree-item-inner.is-clickable:hover {
+    .tm_tree-item-inner.is-clickable:hover {
         background-color: var(--bg-hover);
     }
 
-    .tree-item-self {
+    .tm_tree-item-self {
         display: flex;
         align-items: center;
         gap: 4px;
@@ -58,105 +63,95 @@
         padding-bottom: 0;
     }
 
-    .tree-item-folder-icon svg {
+    .tm_tree-item-folder-icon svg {
         width: var(--button-icon-size);
         height: var(--button-icon-size);
         transform: translate(5px, 1px);
     }
 
-    .tree-item.is-collapsed>.tree-item-children {
+    .tm_tree-item-children {
+        padding-left: 1.5rem;
+        border-left: 1px solid var(--background-modifier-border);
+    }
+
+    .tm_tree-item.is-collapsed>.tm_tree-item-children {
         display: none;
     }
 
-    .tree-item.is-collapsed>.tree-item-self .right-triangle {
-        transform: rotate(-90deg);
-    }
-
-    .right-triangle {
-        transition: transform 100ms ease-in-out;
-    }
-
-    .collapse-icon svg {
+    .collapse-icon {
         color: var(--color-text-clickable);
-        transform: translate(-0.5px, 0px);
-    }
-
-    .collapse-icon:hover svg {
-        color: var(--color-text-hover);
-    }
-
-    .collapse-icon:before {
-        content: '';
-        display: block;
-        position: absolute;
-        left: -4px;
-        top: -7px;
         width: var(--button-size);
         height: var(--button-size);
         border-radius: var(--border-radius);
         background-color: var(--bg-clickable);
     }
+    
+    .collapse-icon svg {
+        transition: transform 100ms ease-in-out;
+    }
 
-    .collapse-icon:hover:before {
+    .tm_tree-item.is-collapsed .collapse-icon:first-of-type svg {
+        transform: rotate(-90deg);
+    }
+
+    .tm_tree-item-icon svg {
+        width: var(--button-icon-size);
+        height: var(--button-icon-size);
+    }
+
+    .collapse-icon:hover {
+        color: var(--color-text-hover);
         background-color: var(--bg-hover);
     }
 
-    .is-clickable {
+    .is-clickable, .tm_icon-button {
         cursor: pointer;
     }
 
     /* Container for the create buttons */
-    .tree-item-buttons-container {
+    .tm_icon-buttons-container {
         display: flex;
         flex-direction: row;
         gap: 4px;
     }
     
-    /* Styles for the create child note button */
-    .tree-item-button {
+    .tm_icon-button {
         color: var(--color-text-clickable);
         border-radius: var(--border-radius);
         background-color: var(--bg-clickable);
         display: flex;
         align-items: center;
         justify-content: center;
-        width: var(--button-size);
+        min-width: var(--button-size);
         height: var(--button-size);
     }
 
-    .tree-item-button:hover {
+    .tm_icon-button:hover {
         color: var(--color-text-hover);
         background-color: var(--bg-hover);
     }
 
-    .tree-item-button svg {
+    .tm_icon-button svg {
         width: var(--button-icon-size);
         height: var(--button-icon-size);
     }
-    
-    .rotate-180deg {
-        transform: rotate(180deg);
+
+    .collapse-icon svg {
+        width: 10px;
+        height: 10px;
     }
 
     /* Style for the currently active file */
-    .tree-item-inner.is-active,
-    .tree-item-inner.is-active:hover {
+    .is-active .tm_tree-item-inner,
+    .is-active .tm_tree-item-inner:hover {
         color: var(--text-on-accent);
         background-color: var(--accent-color);
-    }
-
-    /* Main container for the entire view */
-    .dendron-view-container {
-        display: flex;
-        flex-direction: column;
-        height: 100%;
-        overflow: hidden;
     }
 
     /* Fixed header at the top */
     .dendron-tree-header {
         display: flex;
-        padding: 4px 8px;
+        padding: 8px;
         border-bottom: 1px solid var(--background-modifier-border);
         flex-shrink: 0;
         position: sticky;
@@ -171,6 +166,15 @@
         overflow: auto;
         padding: 0;
         margin: 0;
+        height: calc(100% - 36px); /* Adjust based on header height */
+        display: flex;
+        flex-direction: column;
+    }
+
+    /* Container for the actual tree */
+    .dendron-tree-container {
+        flex: 1;
+        overflow: visible;
     }
 
     .dendron-tree-buttons {

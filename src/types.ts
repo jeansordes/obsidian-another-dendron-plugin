@@ -6,25 +6,24 @@ export const TREE_VIEW_ICON = 'folder-git-2';
 
 export interface PluginSettings {
     mySetting: string;
-    expandedNodes?: string[]; // Array of node paths that are expanded
+    expandedNodes?: Set<string> | string[] | any; // Set of paths that are expanded, may come in different formats when loaded
 }
 
 export const DEFAULT_SETTINGS: PluginSettings = {
     mySetting: 'default',
-    expandedNodes: []
+    expandedNodes: new Set()
 }
 
-export enum DendronNodeType {
+export enum NodeType {
     FILE = 'file',
     FOLDER = 'folder',
     VIRTUAL = 'virtual'
 }
-
-export interface DendronNode {
-    dendronPath: string;
-    filePath: string;
-    folderPath: string;
-    nodeType: DendronNodeType;
+export interface Node {
+    path: string;
+    nodeType: NodeType;
     obsidianResource?: TFile | TFolder;
-    children: Map<string, DendronNode>;
+    children: Map<string, Node>;
+    isActive: boolean;
+    isExpanded?: boolean;
 }
