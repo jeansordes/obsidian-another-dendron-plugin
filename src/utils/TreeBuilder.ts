@@ -1,21 +1,22 @@
 import { App, TFile, TFolder } from 'obsidian';
-import { Node, NodeType } from 'src/types';
+import { TreeNode, TreeNodeType } from 'src/types';
 import { t } from 'src/i18n';
-import { basename } from './FileUtils';
+import { FileUtils } from './FileUtils';
+
 export class TreeBuilder {
     private pathsByDepthLevel: Map<number, Set<string>> = new Map<number, Set<string>>();
-    private nodeTypeByPath = new Map<string, NodeType>();
+    private nodeTypeByPath = new Map<string, TreeNodeType>();
     private childrenAmountByPath = new Map<string, number>();
 
     constructor(private app: App) { }
     /**
      * Creates an empty DendronNode with default values
      */
-    private createDendronNode(options: Partial<Node> = {}): Node {
+    private createDendronNode(options: Partial<TreeNode> = {}): TreeNode {
         return {
             path: '',
-            children: new Map<string, Node>(),
-            nodeType: NodeType.VIRTUAL,
+            children: new Map<string, TreeNode>(),
+            nodeType: TreeNodeType.VIRTUAL,
             ...options
         };
     }
@@ -34,15 +35,15 @@ export class TreeBuilder {
         return [...folderParts, ...filenameParts];
     }
 
-    public buildDendronStructure(folders: TFolder[], files: TFile[]): Node {
+    public buildDendronStructure(folders: TFolder[], files: TFile[]): TreeNode {
         this.buildPathsByDepthLevel(files, folders);
         const rootNode = this.createDendronNode({
             path: '/',
-            nodeType: NodeType.FOLDER,
+            nodeType: TreeNodeType.FOLDER,
         });
 
         // Create a map to quickly look up nodes by path
-        const nodesByPath = new Map<string, Node>();
+        const nodesByPath = new Map<string, TreeNode>();
         nodesByPath.set('/', rootNode);
 
         // Process each depth level in ascending order to ensure parents are created before children
@@ -62,13 +63,13 @@ export class TreeBuilder {
                     path: path,
                     nodeType: this.getNodeType(path),
                     // For FILE nodes, store the Obsidian resource
-                    obsidianResource: this.getNodeType(path) === NodeType.FILE ?
+                    obsidianResource: this.getNodeType(path) === TreeNodeType.FILE ?
                         files.find(f => f.path === path) :
-                        (this.getNodeType(path) === NodeType.FOLDER ? folders.find(f => f.path === path) : undefined)
+                        (this.getNodeType(path) === TreeNodeType.FOLDER ? folders.find(f => f.path === path) : undefined)
                 });
 
                 // Add to parent's children
-                parentNode?.children.set(basename(path), node);
+                parentNode?.children.set(FileUtils.basename(path), node);
 
                 // Add to our lookup map
                 nodesByPath.set(path, node);
@@ -80,26 +81,26 @@ export class TreeBuilder {
 
     public buildPathsByDepthLevel(files: TFile[], folders: TFolder[]): Map<number, Set<string>> {
         this.pathsByDepthLevel = new Map<number, Set<string>>();
-        this.nodeTypeByPath = new Map<string, NodeType>();
+        this.nodeTypeByPath = new Map<string, TreeNodeType>();
         this.childrenAmountByPath = new Map<string, number>();
 
         // Set root folder
-        this.registerNode('/', 0, NodeType.FOLDER);
+        this.registerNode('/', 0, TreeNodeType.FOLDER);
 
         const folderPaths = new Set<string>();
         // Register all folders first
         for (const folder of folders) {
-            this.nodeTypeByPath.set(folder.path, NodeType.FOLDER);
+            this.nodeTypeByPath.set(folder.path, TreeNodeType.FOLDER);
             folderPaths.add(folder.path);
             const depth = folder.path === '/' ? 0 : folder.path.split('/').length;
-            this.registerNode(folder.path, depth, NodeType.FOLDER);
+            this.registerNode(folder.path, depth, TreeNodeType.FOLDER);
         }
 
         // Set to track processed paths to avoid duplicates
         const processedPaths = new Set<string>();
 
         for (const file of files) {
-            this.nodeTypeByPath.set(file.path, NodeType.FILE);
+            this.nodeTypeByPath.set(file.path, TreeNodeType.FILE);
             if (processedPaths.has(file.path)) continue;
             processedPaths.add(file.path);
 
@@ -108,7 +109,7 @@ export class TreeBuilder {
             const depth = folderDepth + fileDepth;
 
             // File registration
-            this.registerNode(file.path, depth, NodeType.FILE);
+            this.registerNode(file.path, depth, TreeNodeType.FILE);
 
             // If the file contains dots, we add the VIRTUAL paths
             if (fileDepth > 1) {
@@ -121,7 +122,7 @@ export class TreeBuilder {
 
                     processedPaths.add(virtualPath);
                     const nodeType = this.getNodeType(virtualPath);
-                    this.registerNode(virtualPath, virtualDepth, NodeType.VIRTUAL);
+                    this.registerNode(virtualPath, virtualDepth, TreeNodeType.VIRTUAL);
 
                     // Get next parent
                     let nextParent = this.getParentPath(virtualPath);
@@ -150,7 +151,7 @@ export class TreeBuilder {
         return this.pathsByDepthLevel;
     }
 
-    private registerNode(path: string, depth: number, type: NodeType = NodeType.VIRTUAL): void {
+    private registerNode(path: string, depth: number, type: TreeNodeType = TreeNodeType.VIRTUAL): void {
         // Skip if this path/depth combination is already registered
         if (this.pathsByDepthLevel.has(depth) &&
             this.pathsByDepthLevel.get(depth)!.has(path)) {
@@ -169,7 +170,7 @@ export class TreeBuilder {
 
         // Only set the node type if it wasn't already set or if we're upgrading from VIRTUAL
         const existingType = this.nodeTypeByPath.get(path);
-        if (!existingType || (existingType === NodeType.VIRTUAL && type !== NodeType.VIRTUAL)) {
+        if (!existingType || (existingType === TreeNodeType.VIRTUAL && type !== TreeNodeType.VIRTUAL)) {
             this.nodeTypeByPath.set(path, type);
         }
 
@@ -181,7 +182,7 @@ export class TreeBuilder {
 
     public getParentPath(path: string): string {
         const nodeType = this.nodeTypeByPath.get(path);
-        if (nodeType === NodeType.FOLDER) {
+        if (nodeType === TreeNodeType.FOLDER) {
             const result = path.replace(/[\/]?[^\/]*$/, '');
             return result === '' ? '/' : result;
         }
@@ -195,15 +196,15 @@ export class TreeBuilder {
     public getNewNotePath(path: string): string {
         const newNoteName = t('untitledPath') + '.md';
         const nodeType = this.nodeTypeByPath.get(path);
-        if (nodeType === NodeType.FOLDER) {
+        if (nodeType === TreeNodeType.FOLDER) {
             return path + '/' + newNoteName;
         }
         // Remove extension and add the new note name
         return path.replace(/\.[^\.]+$/, '') + '.' + newNoteName;
     }
 
-    public getNodeType(path: string): NodeType {
-        return this.nodeTypeByPath.get(path) ?? NodeType.VIRTUAL;
+    public getNodeType(path: string): TreeNodeType {
+        return this.nodeTypeByPath.get(path) ?? TreeNodeType.VIRTUAL;
     }
 
     public getChildrenAmount(path: string): number {

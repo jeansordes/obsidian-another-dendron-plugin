@@ -1,5 +1,5 @@
 import { App, TFile } from 'obsidian';
-import { Node } from '../types';
+import { TreeNode } from '../types';
 
 export class DendronEventHandler {
     private app: App;
@@ -77,9 +77,9 @@ export class DendronEventHandler {
     tryIncrementalUpdate(
         changedPath: string,
         container: HTMLElement,
-        lastBuiltTree: Node | null,
-        nodePathMap: Map<string, Node>,
-        renderCallback: (node: Node, container: HTMLElement) => void
+        lastBuiltTree: TreeNode | null,
+        nodePathMap: Map<string, TreeNode>,
+        renderCallback: (node: TreeNode, container: HTMLElement) => void
     ): boolean {
         if (!container || !lastBuiltTree) return false;
         
@@ -105,13 +105,13 @@ export class DendronEventHandler {
             }
             
             // Find the DOM element for this path
-            const parentElement = container.querySelector(`.tree-item[data-path="${parentPath}"]`) as HTMLElement;
+            const parentElement = container.querySelector(`.tm_tree-item[data-path="${parentPath}"]`) as HTMLElement;
             if (!parentElement) {
                 return false;
             }
             
             // Find the children container
-            const childrenContainer = parentElement.querySelector('.tree-item-children') as HTMLElement;
+            const childrenContainer = parentElement.querySelector('.tm_tree-item-children') as HTMLElement;
             if (!childrenContainer) {
                 return false;
             }

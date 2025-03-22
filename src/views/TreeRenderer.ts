@@ -1,7 +1,7 @@
-import { App, Notice, TFile, setIcon } from 'obsidian';
-import { Node, NodeType } from '../types';
+import { App, Notice, setIcon, TFile } from 'obsidian';
 import { t } from '../i18n';
-import { basename } from '../utils/FileUtils';
+import { TreeNode, TreeNodeType } from '../types';
+import { FileUtils } from '../utils/FileUtils';
 export class TreeRenderer {
     private fileItemsMap: Map<string, HTMLElement>;
     private app: App;
@@ -14,7 +14,7 @@ export class TreeRenderer {
     /**
      * Render a node in the tree
      */
-    renderDendronNode(node: Node, parentEl: HTMLElement, expandedNodes: Set<string>) {
+    public renderDendronNode(node: TreeNode, parentEl: HTMLElement, expandedNodes: Set<string>) {
         // Use DocumentFragment for batch DOM operations
         const fragment = document.createDocumentFragment();
 
@@ -23,34 +23,35 @@ export class TreeRenderer {
             .sort(([aKey], [bKey]) => aKey.localeCompare(bKey))
             .forEach(([name, childNode]) => {
                 const hasChildren = childNode.children.size > 0;
-                
+
                 // Create tree item structure
                 const item = this.createElement('div', {
-                    className: `tree-item${!expandedNodes.has(name) ? ' is-collapsed' : ''}`,
+                    className: `tm_tree-item-container${!expandedNodes.has(name) ? ' is-collapsed' : ''}`,
                     attributes: { 'data-path': name }
                 });
 
                 const itemSelf = this.createElement('div', {
-                    className: `tree-item-self${hasChildren ? ' mod-collapsible' : ''}`
+                    className: `tm_tree-item${hasChildren ? ' mod-collapsible' : ''}`
                 });
                 item.appendChild(itemSelf);
 
-                const contentWrapper = this.createElement('div', { className: 'tree-item-content' });
-                itemSelf.appendChild(contentWrapper);
-
                 // Add components to the tree item
-                this.addToggleButton(contentWrapper, item, hasChildren, expandedNodes);
-                
-                if (childNode.nodeType === NodeType.FOLDER) {
-                    this.addIcon(contentWrapper, 'folder', t('tooltipFolder'));
+                this.addToggleButton(itemSelf, item, hasChildren, expandedNodes);
+
+                if (childNode.nodeType === TreeNodeType.FOLDER) {
+                    const icon = this.createElement('div', {
+                        className: `tm_icon`
+                    });
+                    itemSelf.appendChild(icon);
+                    setIcon(icon, 'folder');
                 }
-                
-                this.addNode(contentWrapper, childNode);
+
+                this.addNode(itemSelf, childNode);
                 this.addActionButtons(itemSelf, childNode, name);
 
                 // Recursively render children
                 if (hasChildren) {
-                    const childrenContainer = this.createElement('div', { className: 'tree-item-children' });
+                    const childrenContainer = this.createElement('div', { className: 'tm_tree-item-children' });
                     item.appendChild(childrenContainer);
                     this.renderDendronNode(childNode, childrenContainer, expandedNodes);
                 }
@@ -71,17 +72,17 @@ export class TreeRenderer {
         title?: string
     }): HTMLElement {
         const element = document.createElement(tag);
-        
+
         if (options?.className) element.className = options.className;
         if (options?.textContent) element.textContent = options.textContent;
         if (options?.title) element.setAttribute('title', options.title);
-        
+
         if (options?.attributes) {
             Object.entries(options.attributes).forEach(([key, value]) => {
                 element.setAttribute(key, value);
             });
         }
-        
+
         return element;
     }
 
@@ -89,13 +90,8 @@ export class TreeRenderer {
      * Add toggle button or spacer for tree items
      */
     private addToggleButton(parent: HTMLElement, item: HTMLElement, hasChildren: boolean, expandedNodes: Set<string>): void {
-        if (!hasChildren) {
-            parent.appendChild(this.createElement('div', { className: 'tree-item-icon-spacer' }));
-            return;
-        }
-        
         const toggleBtn = this.createElement('div', {
-            className: 'tree-item-icon collapse-icon is-clickable'
+            className: 'tm_button-icon'
         });
         parent.appendChild(toggleBtn);
         setIcon(toggleBtn, 'right-triangle');
@@ -104,7 +100,7 @@ export class TreeRenderer {
             event.stopPropagation();
             const isCollapsed = item.classList.toggle('is-collapsed');
             const path = item.getAttribute('data-path');
-            
+
             if (path) {
                 isCollapsed ? expandedNodes.delete(path) : expandedNodes.add(path);
             }
@@ -115,28 +111,15 @@ export class TreeRenderer {
     }
 
     /**
-     * Add icon to an element
-     */
-    private addIcon(parent: HTMLElement, iconName: string, tooltip?: string): HTMLElement {
-        const icon = this.createElement('div', {
-            className: `tree-item-${iconName}-icon`,
-            title: tooltip
-        });
-        parent.appendChild(icon);
-        setIcon(icon, iconName);
-        return icon;
-    }
-
-    /**
      * Add node with appropriate styling
      */
-    private addNode(parent: HTMLElement, node: Node): void {
-        const isFile = node.nodeType === NodeType.FILE;
-        
+    private addNode(parent: HTMLElement, node: TreeNode): void {
+        const isFile = node.nodeType === TreeNodeType.FILE;
+
         // Build class name and determine tooltip
         const className = [
-            'tree-item-inner',
-            node.nodeType === NodeType.VIRTUAL ? 'mod-create-new' : '',
+            'tm_tree-item-self',
+            node.nodeType === TreeNodeType.VIRTUAL ? 'mod-create-new' : '',
             isFile ? 'is-clickable' : ''
         ].filter(Boolean).join(' ');
 
@@ -146,14 +129,14 @@ export class TreeRenderer {
             textContent: this.getNodeName(node),
             title: node.path
         });
-        
+
         parent.appendChild(nameEl);
 
         // Add click handler and store reference for file items
         if (isFile) {
             this.addEventHandler(nameEl, 'click', async () => {
                 if (node.obsidianResource && node.obsidianResource instanceof TFile) {
-                    await this.openFile(node.obsidianResource);
+                    await FileUtils.openFile(this.app, node.obsidianResource);
                 }
             });
 
@@ -163,11 +146,11 @@ export class TreeRenderer {
         }
     }
 
-    private getNodeName(node: Node): string {
-        if (node.nodeType === NodeType.FOLDER) {
-            return basename(node.path);
+    private getNodeName(node: TreeNode): string {
+        if (node.nodeType === TreeNodeType.FOLDER) {
+            return FileUtils.basename(node.path);
         }
-        return basename(node.path).match(/([^.]+)\.[^.]+$/)?.[1] || basename(node.path);
+        return FileUtils.basename(node.path).match(/([^.]+)\.[^.]+$/)?.[1] || FileUtils.basename(node.path);
     }
 
     /**
@@ -180,25 +163,22 @@ export class TreeRenderer {
     /**
      * Add action buttons to a node
      */
-    private addActionButtons(parent: HTMLElement, node: Node, name: string): void {
-        const btnContainer = this.createElement('div', { className: 'tree-item-buttons-container' });
-        parent.appendChild(btnContainer);
-
+    private addActionButtons(parent: HTMLElement, node: TreeNode, name: string): void {
         // Add "create note" button for virtual nodes
-        if (node.nodeType === NodeType.VIRTUAL) {
-            btnContainer.appendChild(this.createActionButton({
+        if (node.nodeType === TreeNodeType.VIRTUAL) {
+            parent.appendChild(this.createActionButton({
                 icon: 'square-pen',
                 title: t('tooltipCreateNote', { path: node.path }),
-                onClick: () => this.createNote(node.path)
+                onClick: () => FileUtils.createNote(this.app, node.path)
             }));
         }
 
         // Add "create child note" button for all nodes
-        btnContainer.appendChild(this.createActionButton({
+        parent.appendChild(this.createActionButton({
             icon: 'rotate-cw-square',
-            title: t('tooltipCreateChildNote', { path: this.getChildPath(node) }),
+            title: t('tooltipCreateChildNote', { path: FileUtils.getChildPath(node.path) }),
             className: 'rotate-180deg',
-            onClick: () => this.createNote(this.getChildPath(node))
+            onClick: () => FileUtils.createChildNote(this.app, node.path)
         }));
     }
 
@@ -212,56 +192,17 @@ export class TreeRenderer {
         onClick: () => Promise<void> | void
     }): HTMLElement {
         const btn = this.createElement('div', {
-            className: `tree-item-button ${options.className || ''} is-clickable`,
+            className: `tm_button-icon ${options.className || ''}`,
             title: options.title
         });
-        
+
         setIcon(btn, options.icon);
-        
+
         this.addEventHandler(btn, 'click', (event) => {
             event.stopPropagation();
             options.onClick();
         });
-        
+
         return btn;
-    }
-
-    /**
-     * Get the path for a child note
-     */
-    private getChildPath(node: Node): string {
-
-        return node.path.replace(/\.md$/, '.' + t('untitledPath') + '.md');
-    }
-
-    /**
-     * Create and open a note at the specified path
-     */
-    private async createNote(path: string): Promise<void> {
-        let note = this.app.vault.getAbstractFileByPath(path);
-
-        if (!note) {
-            try {
-                note = await this.app.vault.create(path, '');
-                new Notice(t('noticeCreatedNote', { path }));
-            } catch (error) {
-                new Notice(t('noticeFailedCreateNote', { path }));
-                return;
-            }
-        }
-
-        if (note instanceof TFile) {
-            await this.openFile(note);
-        }
-    }
-
-    /**
-     * Open a file in a new leaf
-     */
-    private async openFile(file: TFile): Promise<void> {
-        const leaf = this.app.workspace.getLeaf(false);
-        if (leaf) {
-            await leaf.openFile(file);
-        }
     }
 }

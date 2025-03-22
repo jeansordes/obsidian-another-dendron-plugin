@@ -6,5 +6,6 @@
 	"description": "A Dendron-like hierarchical note management system for your vault.",
 	"author": "jeansordes",
 	"authorUrl": "https://github.com/jeansordes",
-	"isDesktopOnly": false
+	"isDesktopOnly": false,
+	"fundingUrl": "https://github.com/sponsors/jeansordes"
 }

@@ -14,15 +14,15 @@ export const DEFAULT_SETTINGS: PluginSettings = {
     expandedNodes: []
 }
 
-export enum NodeType {
+export enum TreeNodeType {
     FILE = 'file',
     FOLDER = 'folder',
     VIRTUAL = 'virtual'
 }
 
-export interface Node {
+export interface TreeNode {
     path: string;
-    nodeType: NodeType;
+    nodeType: TreeNodeType;
     obsidianResource?: TFile | TFolder;
-    children: Map<string, Node>;
+    children: Map<string, TreeNode>;
 }

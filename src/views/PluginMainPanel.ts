@@ -1,18 +1,19 @@
 import { ItemView, TFile, WorkspaceLeaf } from 'obsidian';
-import { DendronEventHandler } from '../handlers/EventHandler';
+import { DendronEventHandler } from '../utils/EventHandler';
 import { t } from '../i18n';
-import { FILE_TREE_VIEW_TYPE, Node, PluginSettings, TREE_VIEW_ICON } from '../types';
+import { FILE_TREE_VIEW_TYPE, TreeNode, PluginSettings, TREE_VIEW_ICON } from '../types';
 import { TreeBuilder } from '../utils/TreeBuilder';
 import { ExpandedNodesManager } from './ExpandedNodesManager';
 import { TreeRenderer } from './TreeRenderer';
+import { FileUtils } from 'src/utils/FileUtils';
 
 // Dendron Tree View class
 export default class PluginMainPanel extends ItemView {
-    private lastBuiltTree: Node | null = null;
+    private lastBuiltTree: TreeNode | null = null;
     private container: HTMLElement | null = null;
     private activeFile: TFile | null = null;
     private fileItemsMap: Map<string, HTMLElement> = new Map();
-    private nodePathMap: Map<string, Node> = new Map();
+    private nodePathMap: Map<string, TreeNode> = new Map();
     private expandedNodes: Set<string> = new Set();
     private settings: PluginSettings;
     
@@ -48,21 +49,21 @@ export default class PluginMainPanel extends ItemView {
         container.empty();
         
         // Set the main container to be a flex container with column direction
-        container.addClass('dendron-view-container');
+        container.addClass('tm_view');
 
         // Create a fixed header with controls
         const header = document.createElement('div');
-        header.className = 'dendron-tree-header';
+        header.className = 'tm_view-header';
         container.appendChild(header);
         
         // Create a scrollable container for the dendron tree
         const scrollContainer = document.createElement('div');
-        scrollContainer.className = 'dendron-tree-scroll-container';
+        scrollContainer.className = 'tm_view-body';
         container.appendChild(scrollContainer);
         
         // Create the actual tree container inside the scroll container
         const treeContainer = document.createElement('div');
-        treeContainer.className = 'dendron-tree-container';
+        treeContainer.className = 'tm_view-tree';
         scrollContainer.appendChild(treeContainer);
         this.container = treeContainer;
         
@@ -111,7 +112,7 @@ export default class PluginMainPanel extends ItemView {
         if (!this.activeFile || !this.container) return;
 
         // Clear previous active file highlighting
-        const previousActive = this.container.querySelector('.tree-item-inner.is-active');
+        const previousActive = this.container.querySelector('.tm_tree-item-self.is-active');
         if (previousActive) {
             previousActive.removeClass('is-active');
         }
@@ -130,7 +131,7 @@ export default class PluginMainPanel extends ItemView {
             }, 50);
             
             // Ensure all parent folders are expanded
-            let parent = fileItem.closest('.tree-item');
+            let parent = fileItem.closest('.tm_tree-item');
             while (parent) {
                 if (parent.hasClass('is-collapsed')) {
                     parent.removeClass('is-collapsed');
@@ -142,7 +143,7 @@ export default class PluginMainPanel extends ItemView {
                     }
                 }
                 const parentElement = parent.parentElement;
-                parent = parentElement ? parentElement.closest('.tree-item') : null;
+                parent = parentElement ? parentElement.closest('.tm_tree-item') : null;
             }
         }
     }
@@ -153,7 +154,7 @@ export default class PluginMainPanel extends ItemView {
     private saveExpandedState(): void {
         this.expandedNodes.clear();
         if (this.container) {
-            const expandedItems = this.container.querySelectorAll('.tree-item:not(.is-collapsed)');
+            const expandedItems = this.container.querySelectorAll('.tm_tree-item:not(.is-collapsed)');
             expandedItems.forEach(item => {
                 const path = item.getAttribute('data-path');
                 if (path) {
@@ -169,7 +170,7 @@ export default class PluginMainPanel extends ItemView {
     private restoreExpandedState(): void {
         if (this.container) {
             this.expandedNodes.forEach(path => {
-                const item = this.container?.querySelector(`.tree-item[data-path="${path}"]`);
+                const item = this.container?.querySelector(`.tm_tree-item[data-path="${path}"]`);
                 if (item) {
                     item.removeClass('is-collapsed');
                     const triangle = item.querySelector('.right-triangle');
@@ -225,30 +226,21 @@ export default class PluginMainPanel extends ItemView {
         
         // Build the dendron structure
         const treeBuilder = new TreeBuilder(this.app);
-        const root = treeBuilder.buildDendronStructure(folders, files);
-        this.lastBuiltTree = root;
+        const rootNode = treeBuilder.buildDendronStructure(folders, files);
+        this.lastBuiltTree = rootNode;
         
         // Build the node path map for quick lookups
         this.nodePathMap.clear();
-        this.buildNodePathMap(root, '');
+        this.buildNodePathMap(rootNode, '');
 
-        // Create a document fragment for batch DOM operations
-        const fragment = document.createDocumentFragment();
-        const rootList = document.createElement('div');
-        rootList.className = 'dendron-tree-list';
-        fragment.appendChild(rootList);
-        
         // Render the tree using the node renderer
-        this.nodeRenderer.renderDendronNode(root, rootList, this.expandedNodes);
-        
-        // Add the fragment to the container in one operation
-        container.appendChild(fragment);
+        await this.nodeRenderer.renderDendronNode(rootNode, container, this.expandedNodes);
     }
     
     /**
      * Build a map of paths to nodes for quick lookups
      */
-    private buildNodePathMap(node: Node, parentPath: string): void {
+    private buildNodePathMap(node: TreeNode, parentPath: string): void {
         for (const [name, childNode] of node.children.entries()) {
             const path = name;
             this.nodePathMap.set(path, childNode);

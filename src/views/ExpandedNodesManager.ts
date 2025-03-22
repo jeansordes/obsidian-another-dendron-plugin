@@ -16,17 +16,17 @@ export class ExpandedNodesManager {
     addControlButtons(header: HTMLElement): void {
         // Create a container for the buttons
         const buttonContainer = document.createElement('div');
-        buttonContainer.className = 'dendron-tree-buttons';
+        buttonContainer.className = 'tm_tree-buttons';
         header.appendChild(buttonContainer);
         
         // Add a single toggle button for expand/collapse all (as a div instead of button)
         const toggleButton = document.createElement('div');
-        toggleButton.className = 'dendron-tree-toggle-button is-clickable';
+        toggleButton.className = 'tm_tree-toggle-button is-clickable';
         buttonContainer.appendChild(toggleButton);
         
         // Create the icon container
         const iconContainer = document.createElement('div');
-        iconContainer.className = 'dendron-tree-toggle-icon';
+        iconContainer.className = 'tm_tree-toggle-icon tm_button-icon';
         toggleButton.appendChild(iconContainer);
         
         // Add click handler
@@ -92,7 +92,7 @@ export class ExpandedNodesManager {
         this.expandedNodes.clear();
         
         // Add collapsed class to all tree items
-        const items = this.container.querySelectorAll('.tree-item');
+        const items = this.container.querySelectorAll('.tm_tree-item');
         items.forEach(item => {
             item.addClass('is-collapsed');
         });
@@ -114,7 +114,7 @@ export class ExpandedNodesManager {
         if (!this.container) return;
         
         // Get all tree items
-        const items = this.container.querySelectorAll('.tree-item');
+        const items = this.container.querySelectorAll('.tm_tree-item');
         
         // Remove collapsed class from all tree items
         items.forEach(item => {
@@ -141,10 +141,10 @@ export class ExpandedNodesManager {
      * Update the toggle button icon based on the current state
      */
     private updateToggleButtonIcon(): void {
-        const toggleButton = this.container.querySelector('.dendron-tree-toggle-button') as HTMLElement | null;
+        const toggleButton = this.container.querySelector('.tm_tree-toggle-button') as HTMLElement | null;
         if (!toggleButton) return;
         
-        const iconContainer = toggleButton.querySelector('.dendron-tree-toggle-icon') as HTMLElement | null;
+        const iconContainer = toggleButton.querySelector('.tm_tree-toggle-icon') as HTMLElement | null;
         if (!iconContainer) return;
         
         const allNodesCollapsed = this.areAllNodesCollapsed();
